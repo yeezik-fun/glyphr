@@ -105,6 +105,9 @@ h2, h3 { margin: 0; font-size: 10.5px; font-weight: 500; color: var(--muted); le
 #zVal { min-width: 40px; text-align: center; font: 10.5px var(--mono); color: var(--fg); }
 .icon { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; height: 26px; padding: 0 10px; font-size: 11.5px; cursor: pointer; color: var(--muted); }
 .icon:hover { color: var(--fg); }
+#resetAll { display: flex; align-items: center; gap: 6px; }
+#resetAll svg { width: 12px; height: 12px; }
+#resetAll.armed { background: var(--danger); border-color: var(--danger); color: #fff; }
 .live { display: flex; align-items: center; gap: 7px; color: var(--muted); font: 10.5px var(--mono); padding: 0 6px; }
 .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px color-mix(in srgb, var(--live) 18%, transparent); }
 
@@ -315,7 +318,7 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
         <button id="cmpBtn" type="button" aria-pressed="false" title="Compare before / after · hold Space to see the original"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 2v20"/></svg><span>Compare</span></button>
       </div>
       <span class="live">Live</span>
-      <div class="tools"><button class="icon" id="playBtn" type="button" hidden>Pause</button><button class="primary sm" id="exportOpen" type="button" title="Export (Ctrl/Cmd + E)">Export</button></div>
+      <div class="tools"><button class="icon" id="playBtn" type="button" hidden>Pause</button><button class="icon" id="resetAll" type="button" title="Reset everything to the start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg><span>Reset</span></button><button class="primary sm" id="exportOpen" type="button" title="Export (Ctrl/Cmd + E)">Export</button></div>
     </div>
     <div class="stage" id="stage">
       <canvas id="gl" width="1080" height="1080"></canvas>
@@ -2025,6 +2028,37 @@ $('#exGo').onclick = async () => {
 };
 
 
+
+/* ---------- reset everything ---------- */
+function resetEverything() {
+  if (srcKind === 'video') { try { srcEl.pause(); } catch (e) {} }
+  if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
+  $('#file').value = '';
+  layers = [newLayer('ascii')]; sel = 0; adj = { ...ADJ0 };
+  Object.assign(demo, { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0 });
+  demoCustom = false;
+  $('#demoText').value = demo.text; $('#demoSub').value = demo.sub;
+  $('#demoHud').setAttribute('aria-pressed', 'true');
+  sampleRes(); saveDemo();
+  setCompare(false);
+  zoom = 'fit';
+  setSource(sample, 'sample', demo.w, demo.h, 'Drop or browse');
+  $('#err').hidden = true; $('#saveForm').hidden = true; $('#exModal').hidden = true;
+  const app = $('.app'); app.style.removeProperty('--lw'); app.style.removeProperty('--rw');
+  try { localStorage.removeItem('glyphr-panels-v2'); } catch (e) {}
+  syncDemoUI(); renderAll(); commit();
+  document.querySelectorAll('.rscroll, aside.left').forEach(el => { el.scrollTop = 0; });
+  toast('Everything is back to the start');
+}
+(() => {
+  const b = $('#resetAll'), label = b.querySelector('span');
+  let armed = null;
+  const disarm = () => { clearTimeout(armed); armed = null; b.classList.remove('armed'); label.textContent = 'Reset'; };
+  b.onclick = () => {
+    if (!armed) { b.classList.add('armed'); label.textContent = 'Reset everything?'; armed = setTimeout(disarm, 3000); return; }
+    disarm(); resetEverything();
+  };
+})();
 
 /* ---------- start ---------- */
 setSource(sample, 'sample', demo.w, demo.h, 'Drop or browse');
