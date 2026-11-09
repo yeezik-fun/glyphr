@@ -135,6 +135,30 @@ h2, h3 { margin: 0; font-size: 10.5px; font-weight: 500; color: var(--muted); le
 .row > .rst { grid-area: r; margin-left: 6px; }
 .row.range { grid-template-areas: "l v r" "s s s"; }
 .row.range > input[type=range] { grid-area: s; }
+.row.range { grid-template-columns: minmax(0,1fr) auto auto auto; grid-template-areas: "l v b r" "s s s s"; }
+.row.range.animated { grid-template-areas: "l v b r" "s s s s" "e e e e"; }
+.row > .auto { grid-area: b; margin-left: 6px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); cursor: pointer; display: grid; place-items: center; opacity: 0; transition: opacity .15s, color .15s; }
+.row:hover > .auto, .row > .auto:focus-visible, .row > .auto[aria-pressed="true"] { opacity: 1; }
+@media (hover: none) { .row > .auto { opacity: 1; } }
+.row > .auto:hover { color: var(--fg); background: var(--hover); }
+.row > .auto[aria-pressed="true"] { color: var(--live); }
+.row > .auto svg { width: 13px; height: 13px; }
+.row.animated > output { color: var(--live); }
+.row.animated input[type=range] { cursor: default; opacity: .9; }
+.autoed { grid-area: e; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto; gap: 6px; align-items: center; padding: 8px; margin-top: 4px; background: color-mix(in srgb, var(--live) 6%, var(--field)); border: 1px solid color-mix(in srgb, var(--live) 30%, var(--line2)); border-radius: 8px; }
+.autoed input, .autoed select { width: 100%; min-width: 0; font: 11px var(--mono); padding: 3px 6px; }
+.autoed select { padding-right: 22px; background-position: right 5px center; font-family: var(--ui); }
+.autoed .ar { color: var(--faint); font-size: 12px; }
+.aswap { width: 24px; height: 24px; border: 1px solid var(--line2); background: var(--field); color: var(--muted); border-radius: 6px; cursor: pointer; padding: 0; font-size: 12px; }
+.aswap:hover { color: var(--fg); }
+.arow { grid-column: 1 / -1; display: grid; grid-template-columns: 62px minmax(0,1fr) minmax(0,1fr); gap: 6px; }
+.adur { position: relative; display: block; }
+.adur input { padding-right: 16px; }
+.adur span { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: var(--faint); font: 10px var(--mono); pointer-events: none; }
+.pill.anim { gap: 6px; padding: 2px 2px 2px 8px; color: var(--live); font: 10.5px var(--mono); }
+.pill.anim .adot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); animation: apulse 1.2s ease-in-out infinite; }
+.pill.anim #animLen { color: var(--muted); }
+@keyframes apulse { 50% { opacity: .3; } }
 .row.wide { grid-template-columns: 84px minmax(0,1fr) auto; grid-template-areas: "l c r"; }
 .row.wide > :nth-child(2) { grid-area: c; }
 .row.wide > .toggle { justify-self: end; }
@@ -317,6 +341,7 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
         <span class="sep"></span>
         <button id="cmpBtn" type="button" aria-pressed="false" title="Compare before / after · hold Space to see the original"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 2v20"/></svg><span>Compare</span></button>
       </div>
+      <div class="pill anim" id="animPill" hidden title="Some values are animating in a loop"><span class="adot"></span><span>Loop</span><span id="animLen">4 s</span><button id="animRestart" type="button" title="Play the loop from the start" aria-label="Restart loop">&#x21BA;</button></div>
       <span class="live">Live</span>
       <div class="tools"><button class="icon" id="playBtn" type="button" hidden>Pause</button><button class="icon" id="resetAll" type="button" title="Reset everything to the start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg><span>Reset</span></button><button class="primary sm" id="exportOpen" type="button" title="Export (Ctrl/Cmd + E)">Export</button></div>
     </div>
@@ -532,10 +557,10 @@ const ctrlsOf = k => EFFECTS[k].groups.flatMap(g => g.controls);
 const defaults = list => Object.fromEntries(list.map(c => [c.id, c.def]));
 const ADJ0 = defaults(ADJ);
 const freshPs = () => Object.fromEntries(Object.keys(EFFECTS).map(k => [k, defaults(ctrlsOf(k))]));
-const newLayer = k => ({ fx: k, on: true, ps: freshPs() });
+const newLayer = k => ({ fx: k, on: true, ps: freshPs(), anims: Object.fromEntries(Object.keys(EFFECTS).map(x => [x, {}])) });
 
 /* Document state: a stack of effect layers (bottom first) plus global adjustments. */
-let layers = [newLayer('ascii')], sel = 0, adj = { ...ADJ0 };
+let layers = [newLayer('ascii')], sel = 0, adj = { ...ADJ0 }, adjAnims = {};
 const L = () => layers[sel];
 const P = () => L().ps[L().fx];
 const hasAscii = () => layers.some(l => l.on && l.fx === 'ascii');
@@ -560,7 +585,7 @@ const PRESETS = [
 const normPreset = pr => pr.layers ? pr : { name: pr.name, layers: [{ fx: pr.fx, p: pr.p }], a: pr.a };
 function stackFrom(pr) {
   return normPreset(pr).layers.filter(l => EFFECTS[l.fx]).map(l => {
-    const x = newLayer(l.fx); x.ps[l.fx] = { ...x.ps[l.fx], ...l.p }; x.on = l.on !== false; return x;
+    const x = newLayer(l.fx); x.ps[l.fx] = { ...x.ps[l.fx], ...l.p }; x.on = l.on !== false; x.anims[l.fx] = JSON.parse(JSON.stringify(l.an || {})); return x;
   });
 }
 
@@ -1290,6 +1315,83 @@ $('#z100').onclick = () => { zoom = 1; applyZoom(); };
 
 
 
+/* ---------- automation: values that move by themselves in a loop ---------- */
+let animT0 = performance.now();
+const animTime = () => (performance.now() - animT0) / 1000;
+const EASES = ['Smooth', 'Linear', 'Ease in', 'Ease out'];
+const MODES = ['⇄ Loop', '→ Loop', 'Once'];
+const EASE = [x => x * x * (3 - 2 * x), x => x, x => x * x * x, x => 1 - Math.pow(1 - x, 3)];
+function animVal(c, a, t) {
+  const d = Math.max(0.1, +a.dur || 4), p = t / d;
+  let x;
+  if ((a.mode | 0) === 0) { const ph = p % 2; x = ph < 1 ? ph : 2 - ph; }
+  else if ((a.mode | 0) === 1) x = p % 1;
+  else x = Math.min(1, p);
+  let v = a.from + (a.to - a.from) * EASE[a.ease | 0](x);
+  if (c.step >= 1) v = Math.round(v);
+  return Math.min(c.max, Math.max(c.min, v));
+}
+const anyKey = o => !!o && Object.keys(o).length > 0;
+function effOf(k, p, an, t) {
+  if (!anyKey(an)) return p;
+  const q = { ...p };
+  for (const c of ctrlsOf(k)) if (an[c.id]) q[c.id] = animVal(c, an[c.id], t);
+  return q;
+}
+function effAdj(t) {
+  if (!anyKey(adjAnims)) return adj;
+  const q = { ...adj };
+  for (const c of ADJ) if (adjAnims[c.id]) q[c.id] = animVal(c, adjAnims[c.id], t);
+  return q;
+}
+function animCycle() {
+  let m = 0;
+  const add = an => { if (an) for (const id in an) { const a = an[id]; m = Math.max(m, (a.mode | 0) === 0 ? 2 * a.dur : a.dur); } };
+  layers.forEach(l => { if (l.on && l.anims) add(l.anims[l.fx]); });
+  add(adjAnims);
+  return m;
+}
+function restartAnims() { animT0 = performance.now(); }
+let liveRows = [];
+function tickLive() {
+  if (!liveRows.length) return;
+  const t = animTime();
+  liveRows.forEach(x => { const v = animVal(x.c, x.a, t); x.r.value = v; x.out.textContent = fmt(x.c, v); paintRange(x.r); });
+}
+function updAnimPill() {
+  const cyc = animCycle();
+  $('#animPill').hidden = !cyc;
+  if (cyc) $('#animLen').textContent = (Math.round(cyc * 10) / 10) + ' s';
+}
+const WAVE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12c2-5 4.5-5 6.5 0s4.5 5 6.5 0 4.5-5 7-1"/></svg>';
+function autoEditor(c, a) {
+  const box = document.createElement('div'); box.className = 'autoed';
+  const num = (key, lbl, min, max, step) => {
+    const i = document.createElement('input'); i.type = 'number';
+    Object.assign(i, { min, max, step, value: a[key] }); i.setAttribute('aria-label', lbl); i.title = lbl;
+    i.onchange = () => { let v = +i.value; if (!isFinite(v)) v = a[key]; v = Math.min(max, Math.max(min, v)); a[key] = v; i.value = v; updAnimPill(); commit(); };
+    return i;
+  };
+  const sel = (key, opts, lbl) => {
+    const e = document.createElement('select'); e.setAttribute('aria-label', lbl); e.title = lbl;
+    opts.forEach((o, i) => e.add(new Option(o, i))); e.value = a[key] | 0;
+    e.onchange = () => { a[key] = +e.value; updAnimPill(); restartAnims(); commit(); };
+    return e;
+  };
+  const from = num('from', 'From', c.min, c.max, c.step), to = num('to', 'To', c.min, c.max, c.step);
+  const arrow = document.createElement('span'); arrow.className = 'ar'; arrow.textContent = '→';
+  const swap = document.createElement('button'); swap.type = 'button'; swap.className = 'aswap'; swap.textContent = '⇄'; swap.title = 'Swap From and To'; swap.setAttribute('aria-label', 'Swap From and To');
+  swap.onclick = () => { const t0 = a.from; a.from = a.to; a.to = t0; from.value = a.from; to.value = a.to; restartAnims(); commit(); };
+  const r2 = document.createElement('div'); r2.className = 'arow';
+  const dw = document.createElement('label'); dw.className = 'adur';
+  const dur = num('dur', 'Duration in seconds', 0.2, 60, 0.1);
+  const su = document.createElement('span'); su.textContent = 's';
+  dw.append(dur, su);
+  r2.append(dw, sel('ease', EASES, 'Curve'), sel('mode', MODES, 'Repeat'));
+  box.append(from, arrow, to, swap, r2);
+  return box;
+}
+
 /* ---------- inspector controls ---------- */
 function fmt(c, v) {
   const d = c.step < 0.1 ? 2 : c.step < 1 ? 1 : 0;
@@ -1298,7 +1400,7 @@ function fmt(c, v) {
 function paintRange(r) { const p = (r.value - r.min) / (r.max - r.min) * 100; r.style.setProperty('--p', p + '%'); }
 document.addEventListener('input', e => { if (e.target.type === 'range') paintRange(e.target); });
 const RESET_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
-function controlRow(c, store, scope, onChange0) {
+function controlRow(c, store, scope, onChange0, an) {
   const row = document.createElement('div');
   row.className = 'row';
   const rst = document.createElement('button');
@@ -1317,6 +1419,28 @@ function controlRow(c, store, scope, onChange0) {
     paintRange(r);
     row.classList.add('range');
     row.append(out, r);
+    if (an) {
+      const a = an[c.id];
+      const ab = document.createElement('button'); ab.type = 'button'; ab.className = 'auto'; ab.innerHTML = WAVE;
+      ab.setAttribute('aria-pressed', !!a); ab.title = a ? 'Stop animating ' + c.label : 'Animate ' + c.label + ' in a loop';
+      ab.setAttribute('aria-label', ab.title);
+      ab.onclick = () => {
+        if (an[c.id]) delete an[c.id];
+        else {
+          const cur = store[c.id], fromV = cur >= c.max ? c.min : c.max;
+          an[c.id] = { from: fromV, to: cur, dur: 4, ease: 0, mode: 0 };
+          restartAnims();
+        }
+        renderControls(); updAnimPill(); commit();
+      };
+      row.append(ab);
+      if (a) {
+        row.classList.add('animated');
+        r.disabled = true; r.title = 'Animated. Edit From / To below, or press the wave button to stop.';
+        liveRows.push({ c, a, r, out });
+        row.append(autoEditor(c, a));
+      }
+    }
   } else {
     row.classList.add('wide');
     let el;
@@ -1357,15 +1481,20 @@ function refreshVisibility() {
 }
 function renderControls() {
   const box = $('#controls'); box.textContent = '';
+  liveRows = [];
   const k = L().fx, p = P();
+  if (!L().anims) L().anims = {};
+  if (!L().anims[k]) L().anims[k] = {};
+  const an = L().anims[k];
   EFFECTS[k].groups.forEach(g => {
     const sec = document.createElement('section'); sec.className = 'block';
-    g.controls.forEach(c => sec.append(controlRow(c, p, k, ch => { if (EFFECTS[k].groups.some(gg => gg.controls.some(x => x.showIf))) refreshVisibility(); })));
+    g.controls.forEach(c => sec.append(controlRow(c, p, k, ch => { if (EFFECTS[k].groups.some(gg => gg.controls.some(x => x.showIf))) refreshVisibility(); }, an)));
     box.append(sec);
   });
   refreshVisibility();
   const a = $('#adj'); a.textContent = '';
-  ADJ.forEach(c => a.append(controlRow(c, adj, 'adj', () => {})));
+  ADJ.forEach(c => a.append(controlRow(c, adj, 'adj', () => {}, adjAnims)));
+  updAnimPill();
   $('#fxName').textContent = EFFECTS[k].name;
   $('#fxIco').innerHTML = artFor(k, 'h');
 }
@@ -1466,6 +1595,7 @@ function renderLists() {
 }
 function applyPreset(pr) {
   layers = stackFrom(pr); sel = 0;
+  adjAnims = JSON.parse(JSON.stringify(pr.adjAn || {})); restartAnims();
   adj = { ...ADJ0, ...(normPreset(pr).a || {}) };
   renderAll(); commit();
 }
@@ -1508,7 +1638,7 @@ $('#saveForm').addEventListener('submit', e => {
   const input = $('#presetName');
   let name = input.value.trim();
   if (!name) { let k = mine.length + 1; while (mine.some(p => p.name === 'My preset ' + k)) k++; name = 'My preset ' + k; }
-  const pr = { name, layers: layers.map(l => ({ fx: l.fx, p: { ...l.ps[l.fx] }, on: l.on })), a: { ...adj } };
+  const pr = { name, layers: layers.map(l => ({ fx: l.fx, p: { ...l.ps[l.fx] }, on: l.on, an: JSON.parse(JSON.stringify((l.anims && l.anims[l.fx]) || {})) })), a: { ...adj }, adjAn: JSON.parse(JSON.stringify(adjAnims)) };
   const at = mine.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
   if (at >= 0) mine[at] = pr; else mine.push(pr);
   persist();
@@ -1575,7 +1705,7 @@ $('#resetBtn').onclick = () => { L().ps[L().fx] = defaults(ctrlsOf(L().fx)); adj
 
 /* ---------- undo / redo ---------- */
 const hist = []; let hi = -1, commitT = 0;
-const snap = () => JSON.stringify({ layers, sel, adj });
+const snap = () => JSON.stringify({ layers, sel, adj, adjAnims });
 function commitNow() {
   clearTimeout(commitT); commitT = 0;
   const s = snap();
@@ -1585,7 +1715,7 @@ function commitNow() {
   hi = hist.length - 1; updUndo();
 }
 function commit() { clearTimeout(commitT); commitT = setTimeout(commitNow, 150); }
-function restore(s) { const o = JSON.parse(s); layers = o.layers; sel = o.sel; adj = o.adj; renderAll(); }
+function restore(s) { const o = JSON.parse(s); layers = o.layers; sel = o.sel; adj = o.adj; adjAnims = o.adjAnims || {}; renderAll(); }
 function undo() { commitNow(); if (hi > 0) { hi--; restore(hist[hi]); } updUndo(); }
 function redo() { commitNow(); if (hi < hist.length - 1) { hi++; restore(hist[hi]); } updUndo(); }
 function updUndo() { $('#undoBtn').disabled = hi <= 0; $('#redoBtn').disabled = hi >= hist.length - 1; }
@@ -1707,8 +1837,8 @@ function asciiGrid(p) {
   return { cols, rows, cw, ch, ox: -Math.floor((cols * cw - canvas.width) / 2), oy: -Math.floor((rows * ch - canvas.height) / 2) };
 }
 const palArr = new Float32Array(48);
-function setUniforms(pr, ly, first) {
-  const u = pr.u, k = ly.fx, p = ly.ps[k], A = first ? adj : ADJ0;
+function setUniforms(pr, ly, first, p, AE) {
+  const u = pr.u, k = ly.fx, A = first ? AE : ADJ0;
   gl.uniform2f(u.u_res, canvas.width, canvas.height);
   if (u.u_time) gl.uniform1f(u.u_time, performance.now() / 1000);
   gl.uniform1f(u.u_bri, A.bri / 200);
@@ -1750,14 +1880,16 @@ function render(ms) {
   gl.viewport(0, 0, canvas.width, canvas.height);
   const act = layers.filter(l => l.on);
   let input = srcTex;
+  const at = animTime(), AE = effAdj(at);
   act.forEach((ly, i) => {
     const out = fbos[i % 2];
-    if (ly.fx === 'ascii') buildAtlas(ly.ps.ascii);
+    const EP = effOf(ly.fx, ly.ps[ly.fx], ly.anims && ly.anims[ly.fx], at);
+    if (ly.fx === 'ascii') buildAtlas(EP);
     gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, atlasTex);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, input);
     const pr = progs[ly.fx]; gl.useProgram(pr.p);
-    setUniforms(pr, ly, i === 0);
+    setUniforms(pr, ly, i === 0, EP, AE);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     input = out.tex;
   });
@@ -1774,7 +1906,7 @@ function render(ms) {
   gl.uniform1f(u.u_lw, Math.max(1, canvas.width / (parseFloat(canvas.style.width) || canvas.width)));
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
-function loop(ms) { try { if (!holding) render(ms); } catch (e) { fail(String(e.message || e)); return; } requestAnimationFrame(loop); }
+function loop(ms) { try { if (!holding) { render(ms); tickLive(); } } catch (e) { fail(String(e.message || e)); return; } requestAnimationFrame(loop); }
 document.fonts.ready.then(() => { atlasChars = ''; refreshThumbs(); });
 
 /* ---------- export ---------- */
@@ -1910,7 +2042,7 @@ function updateModal() {
   if (isTxt) { const g = asciiGrid(asciiP()); sum = g.cols + ' × ' + g.rows + ' characters'; }
   else {
     sum = exo.w + ' × ' + exo.h + ' · ' + (exo.w * exo.h / 1e6).toFixed(1) + ' MP';
-    if (isVid) { const d = srcKind === 'video' ? (srcEl.duration || 0) : exo.dur; sum += ' · ≈ ' + Math.max(1, Math.round(exo.bitrate * d / 8)) + ' MB'; }
+    if (isVid) { const d = srcKind === 'video' ? (srcEl.duration || 0) : exo.dur; sum += ' · ≈ ' + Math.max(1, Math.round(exo.bitrate * d / 8)) + ' MB'; const cy = animCycle(); if (cy && srcKind !== 'video') sum += ' · loop ' + (Math.round(cy * 10) / 10) + ' s'; }
   }
   $('#exSum').textContent = sum;
   document.querySelectorAll('#exModal input[type=range]').forEach(paintRange);
@@ -1935,6 +2067,8 @@ $('#exDur').oninput = e => { exo.dur = +e.target.value; updateModal(); };
 let recCtl = null;
 function openExport() {
   $('#exName').value = stamp();
+  const cyc = animCycle();
+  if (cyc && srcKind !== 'video') exo.dur = Math.min(30, Math.max(1, Math.round(cyc)));
   updateModal();
   $('#exModal').hidden = false;
   $('#exGo').focus();
@@ -1999,6 +2133,7 @@ async function recordVideo(name) {
     v.onended = () => recCtl && recCtl.stop();
   } else setTimeout(() => recCtl && recCtl.stop(), dur * 1000);
   const t0 = performance.now(), go = $('#exGo');
+  restartAnims();
   rec.start(250);
   const timer = setInterval(() => { go.textContent = Math.min(100, Math.round((performance.now() - t0) / 10 / dur)) + '%'; }, 200);
   await done;
@@ -2029,12 +2164,14 @@ $('#exGo').onclick = async () => {
 
 
 
+$('#animRestart').onclick = restartAnims;
+
 /* ---------- reset everything ---------- */
 function resetEverything() {
   if (srcKind === 'video') { try { srcEl.pause(); } catch (e) {} }
   if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
   $('#file').value = '';
-  layers = [newLayer('ascii')]; sel = 0; adj = { ...ADJ0 };
+  layers = [newLayer('ascii')]; sel = 0; adj = { ...ADJ0 }; adjAnims = {};
   Object.assign(demo, { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0 });
   demoCustom = false;
   $('#demoText').value = demo.text; $('#demoSub').value = demo.sub;
