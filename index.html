@@ -316,7 +316,7 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
         <div class="row wide"><label for="demoSub">Subtitle</label><input type="text" id="demoSub" maxlength="32" spellcheck="false" autocomplete="off"></div>
         <div class="row wide"><label for="demoSize">Size</label><select id="demoSize"></select></div>
         <div class="row wide"><label for="demoHud">Frame</label><button type="button" class="toggle" id="demoHud" aria-pressed="true" aria-label="Show camera frame"></button></div>
-        <div class="row wide" id="demoCustom"><label for="demoW">Pixels</label><div class="dims"><input type="number" id="demoW" min="64" max="2560" step="1" aria-label="Canvas width"><span class="by">&times;</span><input type="number" id="demoH" min="64" max="2560" step="1" aria-label="Canvas height"></div></div>
+        <div class="row wide" id="demoCustom"><label for="demoW">Pixels</label><div class="dims"><input type="number" id="demoW" min="64" max="3840" step="1" aria-label="Canvas width"><span class="by">&times;</span><input type="number" id="demoH" min="64" max="3840" step="1" aria-label="Canvas height"></div></div>
       </div>
     </section>
     <div class="rhead"><div class="rtitle"><span class="rico" id="fxIco"></span><h2 id="fxName">ASCII</h2></div><button class="link" id="resetBtn" type="button" title="Reset this layer and the adjustments">Reset</button></div>
@@ -871,12 +871,22 @@ function buildAtlas(p) {
 
 /* ---------- demo sample (animated, drawn on a 2D canvas) ---------- */
 const SW = 1080;
-const DEMO_SIZES = [['1:1 · 1080 × 1080', 1080, 1080], ['4:5 · 1080 × 1350', 1080, 1350], ['9:16 · 1080 × 1920', 1080, 1920], ['16:9 · 1920 × 1080', 1920, 1080], ['3:2 · 1500 × 1000', 1500, 1000], ['Custom', 0, 0]];
-const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: SW, h: SW, scene: 0, hud: true };
-try { Object.assign(demo, JSON.parse(localStorage.getItem('glyphr-demo') || '{}')); } catch (e) {}
+const DEMO_SIZES = [['4K 16:9 · 3840 × 2160', 3840, 2160], ['1:1 · 1080 × 1080', 1080, 1080], ['4:5 · 1080 × 1350', 1080, 1350], ['9:16 · 1080 × 1920', 1080, 1920], ['16:9 · 1920 × 1080', 1920, 1080], ['3:2 · 1500 × 1000', 1500, 1000], ['Custom', 0, 0]];
+const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: 3840, h: 2160, scene: 0, hud: true };
+try {
+  const v2 = localStorage.getItem('glyphr-demo-v2');
+  if (v2) Object.assign(demo, JSON.parse(v2));
+  else { const o = JSON.parse(localStorage.getItem('glyphr-demo') || '{}'); delete o.w; delete o.h; Object.assign(demo, o); }
+} catch (e) {}
 demo.scene = Math.max(0, Math.min(6, demo.scene | 0)); demo.hud = demo.hud !== false;
-demo.w = Math.min(2560, Math.max(64, demo.w | 0 || SW)); demo.h = Math.min(2560, Math.max(64, demo.h | 0 || SW));
-const sample = document.createElement('canvas'); sample.width = demo.w; sample.height = demo.h;
+demo.w = Math.min(3840, Math.max(64, demo.w | 0 || 3840)); demo.h = Math.min(3840, Math.max(64, demo.h | 0 || 2160));
+const sample = document.createElement('canvas');
+/* The preview draws the demo at up to 1920 px; exports redraw it at the full canvas size. */
+function sampleRes(full) {
+  const k = full ? 1 : Math.min(1, 1920 / Math.max(demo.w, demo.h));
+  sample.width = Math.max(2, Math.round(demo.w * k)); sample.height = Math.max(2, Math.round(demo.h * k));
+}
+sampleRes(false);
 const sx = sample.getContext('2d');
 /* Animated demo scenes. Each adapts to any canvas size; the title and the camera frame draw on top. */
 const h1 = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -1341,18 +1351,22 @@ const thumbs = new Map();
 let thumbing = false;
 function thumbFor(key, pr) {
   if (thumbs.has(key)) return thumbs.get(key);
-  const sv = { layers, sel, adj };
+  const sv = { layers, sel, adj }, pw = canvas.width, ph = canvas.height;
   let url = '';
   try {
     layers = stackFrom(pr); sel = 0; adj = { ...ADJ0, ...(normPreset(pr).a || {}) };
     thumbing = true;
+    const tk = Math.min(1, 400 / Math.max(pw, ph));
+    canvas.width = Math.max(2, Math.round(pw * tk)); canvas.height = Math.max(2, Math.round(ph * tk));
+    ex = { ...EX0, k: tk };
     render(performance.now());
     const t = document.createElement('canvas'); t.width = t.height = 120;
     const sz = Math.min(canvas.width, canvas.height) * 0.62;
     t.getContext('2d').drawImage(canvas, (canvas.width - sz) / 2, (canvas.height - sz) / 2, sz, sz, 0, 0, 120, 120);
     url = t.toDataURL('image/jpeg', 0.85);
   } catch (e) {}
-  thumbing = false;
+  thumbing = false; ex = EX0;
+  if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
   layers = sv.layers; sel = sv.sel; adj = sv.adj;
   thumbs.set(key, url);
   return url;
@@ -1537,10 +1551,10 @@ addEventListener('keyup', e => {
 addEventListener('blur', () => { cmp.hold = false; $('#origBadge').hidden = true; });
 
 /* ---------- demo canvas ---------- */
-function saveDemo() { try { localStorage.setItem('glyphr-demo', JSON.stringify(demo)); } catch (e) {} }
+function saveDemo() { try { localStorage.setItem('glyphr-demo-v2', JSON.stringify(demo)); } catch (e) {} }
 function applyDemoSize(w, h) {
-  demo.w = Math.min(2560, Math.max(64, Math.round(w) || SW)); demo.h = Math.min(2560, Math.max(64, Math.round(h) || SW));
-  sample.width = demo.w; sample.height = demo.h; saveDemo();
+  demo.w = Math.min(3840, Math.max(64, Math.round(w) || 3840)); demo.h = Math.min(3840, Math.max(64, Math.round(h) || 2160));
+  sampleRes(false); saveDemo();
   if (srcKind === 'sample') setSource(sample, 'sample', demo.w, demo.h, 'Drop or browse');
   syncDemoUI();
 }
@@ -1838,6 +1852,7 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = fal
 /* Render at the export size. Framing crops (fill) or pads (fit); pixel-based settings scale so the look matches the preview. */
 function beginOut(W, H) {
   const prev = { w: canvas.width, h: canvas.height };
+  if (srcKind === 'sample') sampleRes(true);
   const A = prev.w / prev.h, B = W / H;
   let uvS = [1, 1];
   if (Math.abs(A - B) > 0.005) {
@@ -1849,7 +1864,7 @@ function beginOut(W, H) {
   ex = { uvS, fit: uvS[0] * uvS[1] > 1.0001 ? 1 : 0, pad: hex3(exo.pad), k };
   return prev;
 }
-function endOut(prev) { canvas.width = prev.w; canvas.height = prev.h; ex = EX0; applyZoom(); }
+function endOut(prev) { canvas.width = prev.w; canvas.height = prev.h; ex = EX0; if (srcKind === 'sample') sampleRes(false); applyZoom(); }
 
 async function renderImage() {
   const W = exo.w, H = exo.h;
