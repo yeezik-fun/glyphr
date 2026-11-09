@@ -18,6 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;800&family=Geist+Mono:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Bebas+Neue&family=Bungee&family=Courier+Prime:wght@700&family=IBM+Plex+Mono:wght@700&family=JetBrains+Mono:wght@800&family=Major+Mono+Display&family=Monoton&family=Orbitron:wght@900&family=Permanent+Marker&family=Playfair+Display:ital,wght@1,900&family=Press+Start+2P&family=Righteous&family=Space+Mono:wght@700&family=Syne:wght@800&family=Unbounded:wght@800&family=VT323&display=swap">
 <style>
 /* Layout: three-pane instrument. Library (input, effects, presets) | stage with floating toolbar | inspector.
    One deliberate dark look: near-black graphite, white is the only emphasis, a single green "live" signal. */
@@ -208,6 +209,12 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
 .dtitle { font: 600 15px/1.2 var(--ui) !important; padding: 7px 10px !important; letter-spacing: -0.01em; }
 .dsub { font: 11px var(--mono) !important; letter-spacing: 0.08em; text-transform: uppercase; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.fonts { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 5px; }
+.fnt { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 4px 5px; background: var(--field); border: 1px solid var(--line2); border-radius: 8px; color: var(--muted); cursor: pointer; min-width: 0; transition: border-color .12s, color .12s; }
+.fnt b { font-size: 19px; line-height: 1.1; color: var(--fg); font-weight: 400; }
+.fnt span { font-size: 9.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fnt:hover { border-color: var(--faint); color: var(--fg); }
+.fnt[aria-pressed="true"] { border-color: var(--fg); background: var(--hover); color: var(--fg); }
 .chip { background: var(--field); border: 1px solid var(--line2); color: var(--muted); border-radius: 999px; padding: 3px 9px; font-size: 11px; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 .chip:hover { color: var(--fg); border-color: var(--faint); }
 .chip[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
@@ -364,6 +371,7 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
           <input type="text" id="demoText" class="dtitle" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Your text" aria-label="Title">
           <input type="text" id="demoSub" class="dsub" maxlength="32" spellcheck="false" autocomplete="off" placeholder="Subtitle" aria-label="Subtitle">
         </div>
+        <div class="dsec"><span class="dlab">Font</span><div class="fonts" id="demoFonts" role="group" aria-label="Title font"></div></div>
         <div class="dsec"><span class="dlab">Animation</span><div class="chips" id="demoAnims" role="group" aria-label="Text animation"></div></div>
         <div class="dsec"><span class="dlab">Format</span><div class="ratios" id="demoRatios" role="group" aria-label="Canvas format"></div>
           <div class="dims" id="demoCustom"><input type="number" id="demoW" min="64" max="2560" step="1" aria-label="Canvas width"><span class="by">&times;</span><input type="number" id="demoH" min="64" max="2560" step="1" aria-label="Canvas height"><span class="unit">px</span></div>
@@ -423,6 +431,26 @@ const CHARSETS = [
   " .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
   null
 ];
+const TITLE_FONTS = [
+  ['Geist', '800', 'Geist'], ['Bebas', '400', 'Bebas Neue'], ['Anton', '400', 'Anton'], ['Archivo', '400', 'Archivo Black'],
+  ['Unbounded', '800', 'Unbounded'], ['Syne', '800', 'Syne'], ['Playfair', 'italic 900', 'Playfair Display'], ['Orbitron', '900', 'Orbitron'],
+  ['Pixel', '400', 'Press Start 2P'], ['Terminal', '400', 'VT323'], ['Monoton', '400', 'Monoton'], ['Marker', '400', 'Permanent Marker'],
+  ['Bungee', '400', 'Bungee'], ['Righteous', '400', 'Righteous'], ['Space Mono', '700', 'Space Mono']
+];
+const ASCII_FONTS = [
+  ['Geist Mono', '700', 'Geist Mono'], ['JetBrains Mono', '800', 'JetBrains Mono'], ['IBM Plex Mono', '700', 'IBM Plex Mono'],
+  ['Space Mono', '700', 'Space Mono'], ['Courier', '700', 'Courier Prime'], ['Terminal', '400', 'VT323'],
+  ['Pixel', '400', 'Press Start 2P'], ['Major Mono', '400', 'Major Mono Display']
+];
+const fontSpec = (f, px, fallback) => f[1] + ' ' + px + 'px "' + f[2] + '", ' + fallback;
+const fontsAsked = new Set();
+/* Canvas text only uses a web font once it has loaded, so load it on demand and redraw cached pictures when it arrives. */
+function ensureFont(spec, onReady) {
+  try { if (document.fonts.check(spec)) return; } catch (e) { return; }
+  if (fontsAsked.has(spec)) return;
+  fontsAsked.add(spec);
+  document.fonts.load(spec).then(() => onReady && onReady()).catch(() => {});
+}
 const PALETTES = [
   { name: 'Game Boy', c: ['#0f380f', '#306230', '#8bac0f', '#9bbc0f'] },
   { name: 'PICO-8', c: ['#000000', '#1d2b53', '#7e2553', '#008751', '#ab5236', '#5f574f', '#c2c3c7', '#fff1e8', '#ff004d', '#ffa300', '#ffec27', '#00e436', '#29adff', '#83769c', '#ff77a8', '#ffccaa'] },
@@ -447,6 +475,7 @@ const EFFECTS = {
       { id: 'cell', label: 'Scale', min: 4, max: 200, step: 1, def: 20, unit: 'px' },
       { id: 'spacing', label: 'Spacing', min: 0.5, max: 1.5, step: 0.05, def: 1 },
       { id: 'charset', label: 'Character Set', type: 'select', options: ['Standard', 'Blocks', 'Binary', 'Detailed', 'Custom'], def: 0 },
+      { id: 'font', label: 'Font', type: 'select', options: ASCII_FONTS.map(f => f[0]), def: 0 },
       { id: 'custom', label: 'Characters', type: 'text', def: ' .:yeezik#@', showIf: p => p.charset === 4 },
       { id: 'intensity', label: 'Intensity', min: 0.2, max: 2.5, step: 0.05, def: 1.3 }
     ]},
@@ -896,7 +925,9 @@ function buildAtlas(p) {
   const g = asciiGrid(p), sp = p.spacing;
   const gw = Math.max(2, Math.round(g.cw * sp));
   const gh = Math.max(3, Math.round(g.ch * sp));
-  const key = chars.join('') + '|' + gw + 'x' + gh;
+  const af = ASCII_FONTS[p.font | 0] || ASCII_FONTS[0];
+  ensureFont(fontSpec(af, 32, 'monospace'), () => { atlasChars = ''; refreshThumbs(); });
+  const key = chars.join('') + '|' + gw + 'x' + gh + '|' + af[2];
   if (key === atlasChars) return;
   atlasChars = key;
   glyphW = gw; glyphH = gh;
@@ -906,7 +937,7 @@ function buildAtlas(p) {
   const x = c.getContext('2d');
   x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
   const size = Math.min(gh * 0.82, gw * 1.55);
-  x.font = '700 ' + size.toFixed(1) + 'px "Geist Mono", ui-monospace, Menlo, monospace';
+  x.font = fontSpec(af, size.toFixed(1), 'ui-monospace, Menlo, monospace');
   chars.forEach((ch, i) => {
     const col = i % perRow, row = Math.floor(i / perRow);
     x.fillText(ch, col * gw + gw / 2, row * gh + gh / 2 + gh * 0.04);
@@ -924,13 +955,13 @@ function buildAtlas(p) {
 /* ---------- demo sample (animated, drawn on a 2D canvas) ---------- */
 const SW = 1080;
 const DEMO_SIZES = [['16:9', 1920, 1080], ['1:1', 1080, 1080], ['4:5', 1080, 1350], ['9:16', 1080, 1920], ['3:2', 1500, 1000], ['Custom', 0, 0]];
-const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0 };
+const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0, font: 0 };
 try {
   const v2 = localStorage.getItem('glyphr-demo-v2');
   if (v2) Object.assign(demo, JSON.parse(v2));
   else { const o = JSON.parse(localStorage.getItem('glyphr-demo') || '{}'); delete o.w; delete o.h; Object.assign(demo, o); }
 } catch (e) {}
-demo.scene = Math.max(0, Math.min(6, demo.scene | 0)); demo.tanim = Math.max(0, Math.min(9, demo.tanim | 0)); demo.hud = demo.hud !== false;
+demo.scene = Math.max(0, Math.min(6, demo.scene | 0)); demo.tanim = Math.max(0, Math.min(9, demo.tanim | 0)); demo.font = Math.max(0, Math.min(TITLE_FONTS.length - 1, demo.font | 0)); demo.hud = demo.hud !== false;
 if (demo.w > 2560 || demo.h > 2560) { demo.w = 1920; demo.h = 1080; }
 demo.w = Math.max(64, demo.w | 0 || 1920); demo.h = Math.max(64, demo.h | 0 || 1080);
 const sample = document.createElement('canvas');
@@ -1121,7 +1152,9 @@ function drawTitle(t, W, H, S, cx, cy) {
   let k = 1;
   if (word.length) {
     let fs = 206 * S;
-    const FONT = px => '800 ' + px + 'px Geist, system-ui, -apple-system, sans-serif';
+    const TF = TITLE_FONTS[demo.font | 0] || TITLE_FONTS[0];
+    const FONT = px => fontSpec(TF, px, 'system-ui, -apple-system, sans-serif');
+    ensureFont(FONT(64), () => refreshThumbs());
     sx.font = FONT(fs);
     const raw = word.reduce((p, ch) => p + sx.measureText(ch).width, 0);
     if (raw > W * 0.86) { fs *= W * 0.86 / raw; sx.font = FONT(fs); }
@@ -1770,6 +1803,7 @@ function syncDemoUI() {
   pressAll('#demoRatios .ratio', i);
   pressAll('#demoScenes .scn', demo.scene);
   pressAll('#demoAnims .chip', demo.tanim);
+  pressAll('#demoFonts .fnt', demo.font);
   $('#demoW').value = demo.w; $('#demoH').value = demo.h;
   $('#demoCustom').hidden = i !== DEMO_SIZES.length - 1;
 }
@@ -1789,6 +1823,17 @@ function initDemoUI() {
     const l = document.createElement('span'); l.textContent = s0[0]; b.append(l);
     b.onclick = () => { demo.scene = i; saveDemo(); syncDemoUI(); refreshThumbs(); };
     sc.append(b);
+  });
+  const fl = $('#demoFonts');
+  TITLE_FONTS.forEach((tf, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'fnt'; b.title = tf[2];
+    const aa = document.createElement('b'); aa.textContent = 'Aa';
+    aa.style.fontFamily = '"' + tf[2] + '", system-ui, sans-serif';
+    aa.style.fontWeight = tf[1].replace('italic ', ''); if (tf[1].includes('italic')) aa.style.fontStyle = 'italic';
+    const n = document.createElement('span'); n.textContent = tf[0];
+    b.append(aa, n);
+    b.onclick = () => { demo.font = i; saveDemo(); syncDemoUI(); refreshThumbs(); };
+    fl.append(b);
   });
   const an = $('#demoAnims');
   TEXT_ANIMS.forEach((n, i) => {
@@ -2172,7 +2217,7 @@ function resetEverything() {
   if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
   $('#file').value = '';
   layers = [newLayer('ascii')]; sel = 0; adj = { ...ADJ0 }; adjAnims = {};
-  Object.assign(demo, { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0 });
+  Object.assign(demo, { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0, font: 0 });
   demoCustom = false;
   $('#demoText').value = demo.text; $('#demoSub').value = demo.sub;
   $('#demoHud').setAttribute('aria-pressed', 'true');
