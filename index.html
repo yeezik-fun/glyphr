@@ -313,6 +313,7 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
       <div id="demoFields">
         <div class="row wide"><label for="demoScene">Scene</label><select id="demoScene"></select></div>
         <div class="row wide"><label for="demoText">Text</label><input type="text" id="demoText" maxlength="24" spellcheck="false" autocomplete="off"></div>
+        <div class="row wide"><label for="demoAnim">Animation</label><select id="demoAnim"></select></div>
         <div class="row wide"><label for="demoSub">Subtitle</label><input type="text" id="demoSub" maxlength="32" spellcheck="false" autocomplete="off"></div>
         <div class="row wide"><label for="demoSize">Size</label><select id="demoSize"></select></div>
         <div class="row wide"><label for="demoHud">Frame</label><button type="button" class="toggle" id="demoHud" aria-pressed="true" aria-label="Show camera frame"></button></div>
@@ -872,13 +873,13 @@ function buildAtlas(p) {
 /* ---------- demo sample (animated, drawn on a 2D canvas) ---------- */
 const SW = 1080;
 const DEMO_SIZES = [['4K 16:9 · 3840 × 2160', 3840, 2160], ['1:1 · 1080 × 1080', 1080, 1080], ['4:5 · 1080 × 1350', 1080, 1350], ['9:16 · 1080 × 1920', 1080, 1920], ['16:9 · 1920 × 1080', 1920, 1080], ['3:2 · 1500 × 1000', 1500, 1000], ['Custom', 0, 0]];
-const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: 3840, h: 2160, scene: 0, hud: true };
+const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: 3840, h: 2160, scene: 0, hud: true, tanim: 0 };
 try {
   const v2 = localStorage.getItem('glyphr-demo-v2');
   if (v2) Object.assign(demo, JSON.parse(v2));
   else { const o = JSON.parse(localStorage.getItem('glyphr-demo') || '{}'); delete o.w; delete o.h; Object.assign(demo, o); }
 } catch (e) {}
-demo.scene = Math.max(0, Math.min(6, demo.scene | 0)); demo.hud = demo.hud !== false;
+demo.scene = Math.max(0, Math.min(6, demo.scene | 0)); demo.tanim = Math.max(0, Math.min(9, demo.tanim | 0)); demo.hud = demo.hud !== false;
 demo.w = Math.min(3840, Math.max(64, demo.w | 0 || 3840)); demo.h = Math.min(3840, Math.max(64, demo.h | 0 || 2160));
 const sample = document.createElement('canvas');
 /* The preview draws the demo at up to 1920 px; exports redraw it at the full canvas size. */
@@ -1060,41 +1061,87 @@ function scenePulse(t, W, H, S, cx, cy) {
   }
 }
 const SCENES = [['Title', sceneTitle], ['Synthwave', sceneSynth], ['Warp', sceneWarp], ['Planet', scenePlanet], ['Waves', sceneWaves], ['Tunnel', sceneTunnel], ['Pulse', scenePulse]];
+const TEXT_ANIMS = ['Bounce', 'Wave', 'Typewriter', 'Scramble', 'Glitch', 'Beat', 'Flip', 'Neon', 'Drop', 'Static'];
+const SCRAMBLE = '#@%&*+=?/<>01ABCDEFKXYZ$';
 function drawTitle(t, W, H, S, cx, cy) {
   const word = Array.from(demo.text || '');
+  const A = demo.tanim | 0;
+  let k = 1;
   if (word.length) {
     let fs = 206 * S;
-    sx.font = '800 ' + fs + 'px Geist, system-ui, -apple-system, sans-serif';
+    const FONT = px => '800 ' + px + 'px Geist, system-ui, -apple-system, sans-serif';
+    sx.font = FONT(fs);
     const raw = word.reduce((p, ch) => p + sx.measureText(ch).width, 0);
-    if (raw > W * 0.86) { fs *= W * 0.86 / raw; sx.font = '800 ' + fs + 'px Geist, system-ui, -apple-system, sans-serif'; }
+    if (raw > W * 0.86) { fs *= W * 0.86 / raw; sx.font = FONT(fs); }
     sx.textBaseline = 'alphabetic'; sx.textAlign = 'left';
     const ws = word.map(ch => sx.measureText(ch).width);
-    const total = ws.reduce((p, q) => p + q, 0), k = fs / 206;
+    const total = ws.reduce((p, q) => p + q, 0);
+    k = fs / 206;
     const x0 = cx - total / 2, base = cy + 52 * k;
     const sw = ((t * 0.45) % 1.8) - 0.4;
-    const lg = sx.createLinearGradient(x0, 0, x0 + Math.max(1, total), 0);
-    const st = (p, c) => lg.addColorStop(Math.min(1, Math.max(0, p)), c);
-    st(0, '#d9d9e2'); st(sw - 0.18, '#d9d9e2'); st(sw, '#ffffff'); st(sw + 0.18, '#d9d9e2'); st(1, '#d9d9e2');
-    sx.shadowColor = 'rgba(0,0,0,.55)'; sx.shadowBlur = 30 * k; sx.shadowOffsetY = 10 * k;
+    const L = word.length;
+    let shown = L, cursor = false;
+    if (A === 2) { const cyc = L * 0.12 + 2.4, tc = t % cyc; shown = Math.min(L, Math.floor(tc / 0.12)); cursor = shown < L || Math.floor(t * 2.5) % 2 === 0; }
+    const beat = A === 5 ? 1 + 0.09 * Math.exp(-((t * 2) % 1) * 6) : 1;
+    const seg = Math.floor(t * 14), gOn = A === 4 && h1(seg * 3.7) > 0.7, gx = gOn ? (h1(seg) - 0.5) * 40 * k : 0;
+    const flick = A === 7 ? (h1(Math.floor(t * 20)) > 0.92 ? 0.3 : 1) : 1;
     let x = x0;
     word.forEach((ch, i) => {
-      const hop = Math.max(0, Math.sin(t * 3 - i * 0.55)) * 30 * k;
+      const lx = x + ws[i] / 2; x += ws[i];
+      if (A === 2 && i >= shown) return;
+      let dx = 0, dy = 0, scx = 1, rot = 0, al = 1, c = ch;
+      if (A === 0) dy = -Math.max(0, Math.sin(t * 3 - i * 0.55)) * 30 * k;
+      else if (A === 1) { dy = Math.sin(t * 3 - i * 0.6) * 26 * k; rot = Math.cos(t * 3 - i * 0.6) * 0.08; }
+      else if (A === 3) { const tc = t % 5; if (tc < 0.3 + i * 0.12 && ch !== ' ') c = SCRAMBLE[Math.floor(h1(i * 13 + Math.floor(t * 16)) * SCRAMBLE.length)]; }
+      else if (A === 4) dx = gx + (gOn && h1(i + seg) > 0.55 ? (h1(i * 7 + seg) - 0.5) * 34 * k : 0);
+      else if (A === 6) scx = Math.cos(t * 2.2 - i * 0.45);
+      else if (A === 7) al = flick;
+      else if (A === 8) {
+        const tc = t % 5, p = Math.min(1, Math.max(0, (tc - i * 0.1) / 0.55)), e = 1 - Math.pow(1 - p, 3);
+        const out = Math.min(1, Math.max(0, (tc - 4.3) / 0.5));
+        dy = -(1 - e) * H * 0.6 + out * out * H * 0.75; al = p > 0 ? 1 : 0;
+      }
+      if (!al) return;
+      sx.save();
+      sx.translate(A === 5 ? cx + (lx - cx) * beat : lx + dx, base + dy);
+      if (rot) sx.rotate(rot);
+      sx.scale((Math.abs(scx) < 0.03 ? 0.03 : scx) * beat, beat);
+      sx.globalAlpha = al;
+      const cw = sx.measureText(c).width, ox = -cw / 2;
+      const lg = sx.createLinearGradient(x0 - lx, 0, x0 + total - lx, 0);
+      const st = (p, col) => lg.addColorStop(Math.min(1, Math.max(0, p)), col);
+      if (A === 7) { st(0, '#ffe2f1'); st(1, '#ffd0ea'); }
+      else { st(0, '#d9d9e2'); st(sw - 0.18, '#d9d9e2'); st(sw, '#ffffff'); st(sw + 0.18, '#d9d9e2'); st(1, '#d9d9e2'); }
       sx.lineJoin = 'round'; sx.lineWidth = 22 * k; sx.strokeStyle = 'rgba(4,4,8,.92)';
-      sx.strokeText(ch, x, base - hop);
-      sx.fillStyle = lg; sx.fillText(ch, x, base - hop);
-      x += ws[i];
+      sx.shadowColor = 'rgba(0,0,0,.55)'; sx.shadowBlur = 30 * k; sx.shadowOffsetY = 10 * k;
+      sx.strokeText(c, ox, 0);
+      sx.shadowColor = 'transparent'; sx.shadowBlur = 0; sx.shadowOffsetY = 0;
+      if (gOn) {
+        sx.globalCompositeOperation = 'lighter';
+        sx.fillStyle = 'rgba(255,30,90,.85)'; sx.fillText(c, ox - 7 * k, 0);
+        sx.fillStyle = 'rgba(0,229,255,.85)'; sx.fillText(c, ox + 7 * k, 0);
+        sx.globalCompositeOperation = 'source-over';
+      }
+      if (A === 7) { sx.shadowColor = 'rgba(255,79,163,.95)'; sx.shadowBlur = 45 * k; }
+      sx.fillStyle = lg; sx.fillText(c, ox, 0);
+      if (A === 7) { sx.fillText(c, ox, 0); sx.shadowBlur = 0; sx.shadowColor = 'transparent'; }
+      sx.restore();
     });
-    sx.shadowColor = 'transparent'; sx.shadowBlur = 0; sx.shadowOffsetY = 0;
+    if (cursor) {
+      const cxp = x0 + ws.slice(0, shown).reduce((p, q) => p + q, 0) + 10 * k;
+      sx.lineWidth = 8 * k; sx.strokeStyle = 'rgba(4,4,8,.92)'; sx.fillStyle = '#ffffff';
+      sx.strokeRect(cxp, base - 150 * k, 16 * k, 160 * k); sx.fillRect(cxp, base - 150 * k, 16 * k, 160 * k);
+    }
   }
   if (demo.sub) {
-    const k = word.length ? Math.min(1, (W * 0.86) / Math.max(1, word.length * 130 * S)) : 1;
     sx.font = '500 ' + 30 * S + 'px "Geist Mono", ui-monospace, monospace';
     sx.textAlign = 'center';
     if ('letterSpacing' in sx) sx.letterSpacing = 10 * S + 'px';
     sx.lineJoin = 'round'; sx.lineWidth = 8 * S; sx.strokeStyle = 'rgba(4,4,8,.7)';
-    const y = word.length ? cy + 52 * S * k + Math.max(78 * S, 60 * S * k + 40 * S) : cy;
-    sx.strokeText(demo.sub, cx + 5 * S, y);
-    sx.fillStyle = 'rgba(255,255,255,.8)'; sx.fillText(demo.sub, cx + 5 * S, y);
+    const y = word.length ? cy + 52 * k + Math.max(78 * S, 60 * k + 40 * S) : cy;
+    let sub = demo.sub;
+    if (A === 2) { const n = Math.floor(((t % (Array.from(demo.text || '').length * 0.12 + 2.4)) - Array.from(demo.text || '').length * 0.12) / 0.05); sub = n > 0 ? Array.from(sub).slice(0, n).join('') : ''; }
+    if (sub) { sx.strokeText(sub, cx + 5 * S, y); sx.fillStyle = 'rgba(255,255,255,.8)'; sx.fillText(sub, cx + 5 * S, y); }
     if ('letterSpacing' in sx) sx.letterSpacing = '0px';
   }
 }
@@ -1572,6 +1619,10 @@ function initDemoUI() {
   SCENES.forEach((sc, i) => scn.add(new Option(sc[0], i)));
   scn.value = demo.scene;
   scn.onchange = () => { demo.scene = +scn.value; saveDemo(); refreshThumbs(); };
+  const an = $('#demoAnim');
+  TEXT_ANIMS.forEach((n, i) => an.add(new Option(n, i)));
+  an.value = demo.tanim;
+  an.onchange = () => { demo.tanim = +an.value; saveDemo(); };
   const hud = $('#demoHud');
   hud.setAttribute('aria-pressed', demo.hud);
   hud.onclick = () => { demo.hud = !demo.hud; hud.setAttribute('aria-pressed', demo.hud); saveDemo(); refreshThumbs(); };
