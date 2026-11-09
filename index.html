@@ -311,9 +311,11 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
     <section class="block" id="demoBox">
       <div class="lhead"><h2>Canvas</h2><button class="link" id="demoBack" type="button" hidden>Use demo</button></div>
       <div id="demoFields">
+        <div class="row wide"><label for="demoScene">Scene</label><select id="demoScene"></select></div>
         <div class="row wide"><label for="demoText">Text</label><input type="text" id="demoText" maxlength="24" spellcheck="false" autocomplete="off"></div>
         <div class="row wide"><label for="demoSub">Subtitle</label><input type="text" id="demoSub" maxlength="32" spellcheck="false" autocomplete="off"></div>
         <div class="row wide"><label for="demoSize">Size</label><select id="demoSize"></select></div>
+        <div class="row wide"><label for="demoHud">Frame</label><button type="button" class="toggle" id="demoHud" aria-pressed="true" aria-label="Show camera frame"></button></div>
         <div class="row wide" id="demoCustom"><label for="demoW">Pixels</label><div class="dims"><input type="number" id="demoW" min="64" max="2560" step="1" aria-label="Canvas width"><span class="by">&times;</span><input type="number" id="demoH" min="64" max="2560" step="1" aria-label="Canvas height"></div></div>
       </div>
     </section>
@@ -870,21 +872,26 @@ function buildAtlas(p) {
 /* ---------- demo sample (animated, drawn on a 2D canvas) ---------- */
 const SW = 1080;
 const DEMO_SIZES = [['1:1 · 1080 × 1080', 1080, 1080], ['4:5 · 1080 × 1350', 1080, 1350], ['9:16 · 1080 × 1920', 1080, 1920], ['16:9 · 1920 × 1080', 1920, 1080], ['3:2 · 1500 × 1000', 1500, 1000], ['Custom', 0, 0]];
-const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: SW, h: SW };
+const demo = { text: 'Glyphr', sub: 'BY YEEZIK', w: SW, h: SW, scene: 0, hud: true };
 try { Object.assign(demo, JSON.parse(localStorage.getItem('glyphr-demo') || '{}')); } catch (e) {}
+demo.scene = Math.max(0, Math.min(6, demo.scene | 0)); demo.hud = demo.hud !== false;
 demo.w = Math.min(2560, Math.max(64, demo.w | 0 || SW)); demo.h = Math.min(2560, Math.max(64, demo.h | 0 || SW));
 const sample = document.createElement('canvas'); sample.width = demo.w; sample.height = demo.h;
 const sx = sample.getContext('2d');
-/* Title loop that adapts to any canvas size: the wordmark bouncing over moving color light and rotating rings. */
-function drawSample(ms) {
-  const t = ms / 1000, W = sample.width, H = sample.height, cx = W / 2, cy = H / 2;
-  const S = Math.min(W, H) / 900, ax = W / 900, ay = H / 900;
-  sx.setLineDash([]);
-  sx.globalCompositeOperation = 'source-over';
+/* Animated demo scenes. Each adapts to any canvas size; the title and the camera frame draw on top. */
+const h1 = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+function stars(n, W, H, S, t, maxY) {
+  for (let i = 0; i < n; i++) {
+    const x = h1(i) * W, y = h1(i + 50) * (maxY || H);
+    const a = 0.25 + 0.75 * Math.abs(Math.sin(t * (0.4 + h1(i + 9)) + i));
+    const z = (1 + h1(i + 3) * 2) * S;
+    sx.fillStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; sx.fillRect(x, y, z, z);
+  }
+}
+function sceneTitle(t, W, H, S, cx, cy, ax, ay) {
   let g = sx.createRadialGradient(cx, cy, 40 * S, cx, cy, Math.max(W, H) * 0.73);
   g.addColorStop(0, '#241b40'); g.addColorStop(1, '#06060a');
   sx.fillStyle = g; sx.fillRect(0, 0, W, H);
-
   sx.globalCompositeOperation = 'lighter';
   [['255,79,163', 0], ['70,200,230', 2.1], ['255,186,80', 4.2]].forEach(([c, o]) => {
     const a = t * 0.45 + o;
@@ -894,7 +901,6 @@ function drawSample(ms) {
     sx.fillStyle = gg; sx.fillRect(0, 0, W, H);
   });
   sx.globalCompositeOperation = 'source-over';
-
   sx.save(); sx.translate(cx, cy);
   for (let i = 0; i < 3; i++) {
     sx.save();
@@ -906,47 +912,183 @@ function drawSample(ms) {
     sx.restore();
   }
   sx.restore(); sx.setLineDash([]);
-
   const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
   g = sx.createRadialGradient(cx, cy - 20 * S, 0, cx, cy - 20 * S, 230 * S);
   g.addColorStop(0, 'rgba(255,255,255,' + (0.10 + pulse * 0.08) + ')'); g.addColorStop(1, 'rgba(255,255,255,0)');
   sx.fillStyle = g; sx.fillRect(0, 0, W, H);
-
-  const word = Array.from(demo.text || ' ');
-  let fs = 206 * S;
-  sx.font = '800 ' + fs + 'px Geist, system-ui, -apple-system, sans-serif';
-  const raw = word.reduce((p, ch) => p + sx.measureText(ch).width, 0);
-  if (raw > W * 0.86) { fs *= W * 0.86 / raw; sx.font = '800 ' + fs + 'px Geist, system-ui, -apple-system, sans-serif'; }
-  sx.textBaseline = 'alphabetic'; sx.textAlign = 'left';
-  const ws = word.map(ch => sx.measureText(ch).width);
-  const total = ws.reduce((p, q) => p + q, 0);
-  const k = fs / 206;
-  const x0 = cx - total / 2, base = cy + 52 * k + (demo.sub ? 0 : 0);
-  const sw = ((t * 0.45) % 1.8) - 0.4;
-  const lg = sx.createLinearGradient(x0, 0, x0 + Math.max(1, total), 0);
-  const st = (p, c) => lg.addColorStop(Math.min(1, Math.max(0, p)), c);
-  st(0, '#d9d9e2'); st(sw - 0.18, '#d9d9e2'); st(sw, '#ffffff'); st(sw + 0.18, '#d9d9e2'); st(1, '#d9d9e2');
-  sx.shadowColor = 'rgba(0,0,0,.55)'; sx.shadowBlur = 30 * k; sx.shadowOffsetY = 10 * k;
-  let x = x0;
-  word.forEach((ch, i) => {
-    const hop = Math.max(0, Math.sin(t * 3 - i * 0.55)) * 30 * k;
-    sx.lineJoin = 'round'; sx.lineWidth = 22 * k; sx.strokeStyle = 'rgba(4,4,8,.92)';
-    sx.strokeText(ch, x, base - hop);
-    sx.fillStyle = lg;
-    sx.fillText(ch, x, base - hop);
-    x += ws[i];
-  });
-  sx.shadowColor = 'transparent'; sx.shadowBlur = 0; sx.shadowOffsetY = 0;
-
+}
+function sceneSynth(t, W, H, S, cx) {
+  const hz = H * 0.64;
+  const sky = () => { const g = sx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#0d0420'); g.addColorStop(0.55, '#3a0b55'); g.addColorStop(1, '#ff4f8b'); return g; };
+  sx.fillStyle = sky(); sx.fillRect(0, 0, W, hz);
+  stars(90, W, H, S, t, hz * 0.6);
+  const r = Math.min(W, H) * 0.27, sy = hz - r * 0.3;
+  sx.save(); sx.beginPath(); sx.rect(0, 0, W, hz); sx.clip();
+  let g = sx.createLinearGradient(0, sy - r, 0, sy + r);
+  g.addColorStop(0, '#ffe46b'); g.addColorStop(0.5, '#ff8a4c'); g.addColorStop(1, '#ff2d8a');
+  sx.fillStyle = g; sx.shadowColor = 'rgba(255,90,150,.8)'; sx.shadowBlur = 70 * S;
+  sx.beginPath(); sx.arc(cx, sy, r, 0, Math.PI * 2); sx.fill(); sx.shadowBlur = 0;
+  sx.fillStyle = sky();
+  const gap = r * 0.15, off = (t * 16 * S) % gap;
+  for (let k = 0; k < 8; k++) sx.fillRect(cx - r, sy + r * 0.02 + k * gap + off, r * 2, (2 + k * 2.2) * S * (r / (243 * S)));
+  sx.restore();
+  sx.fillStyle = '#1b0731'; sx.beginPath(); sx.moveTo(0, hz);
+  for (let i = 0; i <= 48; i++) {
+    const x = i / 48 * W, e = Math.abs(x - cx) / (W / 2);
+    const n = Math.abs(Math.sin(i * 0.9 + 1.3) * 0.6 + Math.sin(i * 2.3) * 0.4);
+    sx.lineTo(x, hz - n * H * 0.1 * (0.15 + e));
+  }
+  sx.lineTo(W, hz); sx.closePath(); sx.fill();
+  g = sx.createLinearGradient(0, hz, 0, H); g.addColorStop(0, '#2a0838'); g.addColorStop(1, '#07020f');
+  sx.fillStyle = g; sx.fillRect(0, hz, W, H - hz);
+  sx.strokeStyle = '#ff4fa3'; sx.lineWidth = 2 * S; sx.shadowColor = '#ff4fa3'; sx.shadowBlur = 14 * S;
+  const N = 14, ph = (t * 0.6) % 1;
+  for (let i = 0; i < N; i++) {
+    const q = (i + ph) / N, y = hz + (H - hz) * q * q;
+    sx.globalAlpha = Math.min(1, q * 2.5); sx.beginPath(); sx.moveTo(0, y); sx.lineTo(W, y); sx.stroke();
+  }
+  sx.globalAlpha = 1;
+  for (let i = -14; i <= 14; i++) { sx.beginPath(); sx.moveTo(cx + i * W * 0.02, hz); sx.lineTo(cx + i * W * 0.17, H); sx.stroke(); }
+  sx.shadowBlur = 0;
+}
+function sceneWarp(t, W, H, S, cx, cy) {
+  sx.fillStyle = '#04040a'; sx.fillRect(0, 0, W, H);
+  const R = Math.max(W, H) * 0.6;
+  const g = sx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.55);
+  g.addColorStop(0, 'rgba(120,70,255,.5)'); g.addColorStop(1, 'rgba(91,44,240,0)');
+  sx.fillStyle = g; sx.fillRect(0, 0, W, H);
+  sx.lineCap = 'round';
+  const cols = ['255,255,255', '120,230,255', '255,110,190'];
+  for (let i = 0; i < 280; i++) {
+    const a = h1(i) * Math.PI * 2, d = 0.08 + h1(i + 7) * 0.92;
+    const z = Math.max(0.03, 1 - ((t * 0.3 + h1(i + 13)) % 1));
+    const r1 = d * R * 0.09 / z, r0 = d * R * 0.09 / Math.min(1, z + 0.07);
+    if (r0 > R * 1.6) continue;
+    sx.strokeStyle = 'rgba(' + cols[i % 3] + ',' + Math.min(1, (1 - z) * 1.4).toFixed(2) + ')';
+    sx.lineWidth = Math.max(0.6, (1 - z) * 4 * S);
+    sx.beginPath(); sx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); sx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); sx.stroke();
+  }
+  sx.lineCap = 'butt';
+}
+function scenePlanet(t, W, H, S, cx, cy) {
+  sx.fillStyle = '#05050c'; sx.fillRect(0, 0, W, H);
+  stars(140, W, H, S, t);
+  const R = Math.min(W, H) * 0.26, tilt = -0.35;
+  const ring = (front) => {
+    sx.save(); sx.translate(cx, cy); sx.rotate(tilt);
+    const g = sx.createLinearGradient(-R * 1.9, 0, R * 1.9, 0);
+    g.addColorStop(0, 'rgba(255,186,80,.15)'); g.addColorStop(0.5, 'rgba(255,186,80,.9)'); g.addColorStop(1, 'rgba(255,79,163,.2)');
+    sx.strokeStyle = g; sx.lineWidth = 14 * S;
+    sx.beginPath(); sx.ellipse(0, 0, R * 1.8, R * 0.42, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2); sx.stroke();
+    sx.lineWidth = 4 * S; sx.globalAlpha = 0.6;
+    sx.beginPath(); sx.ellipse(0, 0, R * 2.05, R * 0.5, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2); sx.stroke();
+    sx.restore();
+  };
+  const ma = t * 0.7, mx = cx + Math.cos(ma) * R * 2.3, my = cy + Math.sin(ma) * R * 0.6, mr = R * 0.11;
+  const moon = () => { const g = sx.createRadialGradient(mx - mr * 0.4, my - mr * 0.4, 0, mx, my, mr); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#8a8aa0'); sx.fillStyle = g; sx.beginPath(); sx.arc(mx, my, mr, 0, Math.PI * 2); sx.fill(); };
+  if (Math.sin(ma) < 0) moon();
+  ring(false);
+  let g = sx.createRadialGradient(cx - R * 0.4, cy - R * 0.45, R * 0.05, cx, cy, R * 1.25);
+  g.addColorStop(0, '#b8f7ff'); g.addColorStop(0.25, '#46c8e6'); g.addColorStop(0.65, '#5b2cf0'); g.addColorStop(1, '#0b0620');
+  sx.fillStyle = g; sx.beginPath(); sx.arc(cx, cy, R, 0, Math.PI * 2); sx.fill();
+  sx.save(); sx.beginPath(); sx.arc(cx, cy, R, 0, Math.PI * 2); sx.clip();
+  sx.strokeStyle = 'rgba(255,255,255,.22)'; sx.lineWidth = 2 * S;
+  for (let k = 0; k < 8; k++) {
+    const ph = k * Math.PI / 8 + t * 0.6, c = Math.cos(ph);
+    sx.beginPath(); sx.ellipse(cx, cy, Math.abs(c) * R, R, 0, 0, Math.PI * 2); sx.stroke();
+  }
+  for (let j = -3; j <= 3; j++) {
+    const y = cy + R * j / 4, rx = Math.sqrt(Math.max(0, R * R - (y - cy) * (y - cy)));
+    sx.beginPath(); sx.ellipse(cx, y, rx, rx * 0.16, 0, 0, Math.PI * 2); sx.stroke();
+  }
+  g = sx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  g.addColorStop(0.45, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.6)');
+  sx.fillStyle = g; sx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  sx.restore();
+  ring(true);
+  if (Math.sin(ma) >= 0) moon();
+}
+function sceneWaves(t, W, H, S) {
+  sx.fillStyle = '#07060f'; sx.fillRect(0, 0, W, H);
+  const cols = ['#5b2cf0', '#8a3cf0', '#c042d8', '#ff4fa3', '#ff7a7a', '#ffba50', '#46c8e6'];
+  sx.lineCap = 'round'; sx.lineJoin = 'round';
+  for (let i = 0; i < 13; i++) {
+    const base = H * (0.08 + i * 0.07), amp = H * 0.055 * (1 + 0.5 * Math.sin(i * 1.7));
+    const f = (2 + (i % 3)) * Math.PI / W;
+    sx.beginPath();
+    for (let j = 0; j <= 90; j++) {
+      const x = j / 90 * W;
+      const y = base + Math.sin(x * f + t * (0.8 + i * 0.12) + i) * amp + Math.sin(x * f * 2.3 - t * 1.3 + i) * amp * 0.3;
+      j ? sx.lineTo(x, y) : sx.moveTo(x, y);
+    }
+    sx.strokeStyle = cols[i % cols.length]; sx.globalAlpha = 0.9; sx.lineWidth = (10 + (i % 4) * 7) * S; sx.stroke();
+  }
+  sx.globalAlpha = 1; sx.lineCap = 'butt';
+}
+function sceneTunnel(t, W, H, S, cx, cy) {
+  sx.fillStyle = '#050508'; sx.fillRect(0, 0, W, H);
+  const M = Math.hypot(W, H);
+  for (let i = 0; i < 30; i++) {
+    const z = ((i / 30) + t * 0.16) % 1, sz = Math.pow(z, 2.4) * M * 1.15;
+    if (sz < 2) continue;
+    sx.save(); sx.translate(cx, cy); sx.rotate(t * 0.35 + z * 2.4);
+    sx.strokeStyle = 'hsla(' + Math.round((i * 23 + t * 50) % 360) + ',90%,62%,' + Math.min(1, z * 1.7).toFixed(2) + ')';
+    sx.lineWidth = Math.max(1, z * 18 * S);
+    sx.strokeRect(-sz / 2, -sz / 2, sz, sz);
+    sx.restore();
+  }
+}
+function scenePulse(t, W, H, S, cx, cy) {
+  sx.fillStyle = '#08070d'; sx.fillRect(0, 0, W, H);
+  const step = 34 * S, m = Math.min(W, H);
+  for (let y = step / 2; y < H; y += step) for (let x = step / 2; x < W; x += step) {
+    const d = Math.hypot(x - cx, y - cy) / m;
+    const v = 0.5 + 0.5 * Math.sin(d * 20 - t * 3);
+    const hue = 290 + 120 * Math.min(1, d * 1.6);
+    sx.fillStyle = 'hsl(' + (hue % 360).toFixed(0) + ',90%,' + (35 + v * 35).toFixed(0) + '%)';
+    sx.beginPath(); sx.arc(x, y, step * 0.47 * v + S, 0, Math.PI * 2); sx.fill();
+  }
+}
+const SCENES = [['Title', sceneTitle], ['Synthwave', sceneSynth], ['Warp', sceneWarp], ['Planet', scenePlanet], ['Waves', sceneWaves], ['Tunnel', sceneTunnel], ['Pulse', scenePulse]];
+function drawTitle(t, W, H, S, cx, cy) {
+  const word = Array.from(demo.text || '');
+  if (word.length) {
+    let fs = 206 * S;
+    sx.font = '800 ' + fs + 'px Geist, system-ui, -apple-system, sans-serif';
+    const raw = word.reduce((p, ch) => p + sx.measureText(ch).width, 0);
+    if (raw > W * 0.86) { fs *= W * 0.86 / raw; sx.font = '800 ' + fs + 'px Geist, system-ui, -apple-system, sans-serif'; }
+    sx.textBaseline = 'alphabetic'; sx.textAlign = 'left';
+    const ws = word.map(ch => sx.measureText(ch).width);
+    const total = ws.reduce((p, q) => p + q, 0), k = fs / 206;
+    const x0 = cx - total / 2, base = cy + 52 * k;
+    const sw = ((t * 0.45) % 1.8) - 0.4;
+    const lg = sx.createLinearGradient(x0, 0, x0 + Math.max(1, total), 0);
+    const st = (p, c) => lg.addColorStop(Math.min(1, Math.max(0, p)), c);
+    st(0, '#d9d9e2'); st(sw - 0.18, '#d9d9e2'); st(sw, '#ffffff'); st(sw + 0.18, '#d9d9e2'); st(1, '#d9d9e2');
+    sx.shadowColor = 'rgba(0,0,0,.55)'; sx.shadowBlur = 30 * k; sx.shadowOffsetY = 10 * k;
+    let x = x0;
+    word.forEach((ch, i) => {
+      const hop = Math.max(0, Math.sin(t * 3 - i * 0.55)) * 30 * k;
+      sx.lineJoin = 'round'; sx.lineWidth = 22 * k; sx.strokeStyle = 'rgba(4,4,8,.92)';
+      sx.strokeText(ch, x, base - hop);
+      sx.fillStyle = lg; sx.fillText(ch, x, base - hop);
+      x += ws[i];
+    });
+    sx.shadowColor = 'transparent'; sx.shadowBlur = 0; sx.shadowOffsetY = 0;
+  }
   if (demo.sub) {
+    const k = word.length ? Math.min(1, (W * 0.86) / Math.max(1, word.length * 130 * S)) : 1;
     sx.font = '500 ' + 30 * S + 'px "Geist Mono", ui-monospace, monospace';
     sx.textAlign = 'center';
     if ('letterSpacing' in sx) sx.letterSpacing = 10 * S + 'px';
-    sx.fillStyle = 'rgba(255,255,255,.72)';
-    sx.fillText(demo.sub, cx + 5 * S, base + Math.max(78 * S, 60 * k + 40 * S));
+    sx.lineJoin = 'round'; sx.lineWidth = 8 * S; sx.strokeStyle = 'rgba(4,4,8,.7)';
+    const y = word.length ? cy + 52 * S * k + Math.max(78 * S, 60 * S * k + 40 * S) : cy;
+    sx.strokeText(demo.sub, cx + 5 * S, y);
+    sx.fillStyle = 'rgba(255,255,255,.8)'; sx.fillText(demo.sub, cx + 5 * S, y);
     if ('letterSpacing' in sx) sx.letterSpacing = '0px';
   }
-
+}
+function drawHud(t, W, H, S) {
   sx.strokeStyle = 'rgba(255,255,255,.55)'; sx.lineWidth = 3 * S;
   const m = 46 * S, L = 38 * S;
   [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]].forEach(([px, py, dx, dy]) => {
@@ -961,6 +1103,16 @@ function drawSample(ms) {
   const secs = Math.floor(t % 3600);
   sx.fillStyle = 'rgba(255,255,255,.6)';
   sx.fillText(String(Math.floor(secs / 60)).padStart(2, '0') + ':' + String(secs % 60).padStart(2, '0') + ':' + String(Math.floor((t % 1) * 30)).padStart(2, '0'), W - m - 14 * S, H - m - 18 * S);
+}
+function drawSample(ms) {
+  const t = ms / 1000, W = sample.width, H = sample.height, cx = W / 2, cy = H / 2;
+  const S = Math.min(W, H) / 900, ax = W / 900, ay = H / 900;
+  const reset = () => { sx.setLineDash([]); sx.globalCompositeOperation = 'source-over'; sx.globalAlpha = 1; sx.shadowBlur = 0; sx.shadowColor = 'transparent'; sx.lineCap = 'butt'; };
+  reset();
+  (SCENES[demo.scene] || SCENES[0])[1](t, W, H, S, cx, cy, ax, ay);
+  reset();
+  drawTitle(t, W, H, S, cx, cy);
+  if (demo.hud) drawHud(t, W, H, S);
 }
 
 /* ---------- source management ---------- */
@@ -1402,6 +1554,13 @@ function syncDemoUI() {
 function initDemoUI() {
   const sel = $('#demoSize');
   DEMO_SIZES.forEach((d, i) => sel.add(new Option(d[0], i)));
+  const scn = $('#demoScene');
+  SCENES.forEach((sc, i) => scn.add(new Option(sc[0], i)));
+  scn.value = demo.scene;
+  scn.onchange = () => { demo.scene = +scn.value; saveDemo(); refreshThumbs(); };
+  const hud = $('#demoHud');
+  hud.setAttribute('aria-pressed', demo.hud);
+  hud.onclick = () => { demo.hud = !demo.hud; hud.setAttribute('aria-pressed', demo.hud); saveDemo(); refreshThumbs(); };
   $('#demoText').value = demo.text; $('#demoSub').value = demo.sub;
   $('#demoText').oninput = e => { demo.text = e.target.value; saveDemo(); };
   $('#demoSub').oninput = e => { demo.sub = e.target.value; saveDemo(); };
