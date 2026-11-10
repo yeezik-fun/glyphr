@@ -202,6 +202,8 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
 .rscroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
 #demoFields { display: flex; flex-direction: column; gap: 14px; }
 .dsec { display: flex; flex-direction: column; gap: 7px; }
+.dnote { margin: 0; font-size: 11px; color: var(--faint); }
+#ovSec { padding: 10px; border: 1px solid var(--line2); border-radius: 10px; background: var(--field); }
 .dlab { font-size: 10.5px; color: var(--faint); letter-spacing: 0.02em; }
 .scenes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .scn { position: relative; padding: 0; border: 0; border-radius: 7px; overflow: hidden; cursor: pointer; aspect-ratio: 16 / 10; background: var(--field) center / cover no-repeat; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.12); transition: transform .15s, box-shadow .15s; }
@@ -368,17 +370,27 @@ select { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor
     <section class="block" id="demoBox">
       <div class="lhead"><h2>Canvas</h2><button class="link" id="demoBack" type="button" hidden>Use demo</button></div>
       <div id="demoFields">
-        <div class="dsec"><span class="dlab">Scene</span><div class="scenes" id="demoScenes" role="group" aria-label="Scene"></div></div>
-        <div class="dsec"><span class="dlab">Title</span>
+        <div class="dsec" id="ovSec" hidden>
+          <div class="row wide"><label for="ovOn">Animate photo</label><button type="button" class="toggle" id="ovOn" aria-pressed="false"></button></div>
+          <p class="dnote" id="ovNote">Lay an animated scene over your photo or video.</p>
+          <div class="dsec" id="ovOpts">
+            <span class="dlab">Blend</span><div class="chips" id="ovBlend" role="group" aria-label="Blend mode"></div>
+            <div class="row range"><label for="ovOp">Opacity</label><output id="ovOpV"></output><input type="range" id="ovOp" min="0" max="1" step="0.01"></div>
+            <div class="row wide"><label for="ovTitle">Title</label><button type="button" class="toggle" id="ovTitle" aria-pressed="false"></button></div>
+            <div class="row wide"><label for="ovHud">Camera frame</label><button type="button" class="toggle" id="ovHud" aria-pressed="false"></button></div>
+          </div>
+        </div>
+        <div class="dsec dscene"><span class="dlab">Scene</span><div class="scenes" id="demoScenes" role="group" aria-label="Scene"></div></div>
+        <div class="dsec dscene dtext"><span class="dlab">Title</span>
           <input type="text" id="demoText" class="dtitle" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Your text" aria-label="Title">
           <input type="text" id="demoSub" class="dsub" maxlength="32" spellcheck="false" autocomplete="off" placeholder="Subtitle" aria-label="Subtitle">
         </div>
-        <div class="dsec"><span class="dlab">Font</span><div class="fonts" id="demoFonts" role="group" aria-label="Title font"></div></div>
-        <div class="dsec"><span class="dlab">Animation</span><div class="chips" id="demoAnims" role="group" aria-label="Text animation"></div></div>
-        <div class="dsec"><span class="dlab">Format</span><div class="ratios" id="demoRatios" role="group" aria-label="Canvas format"></div>
+        <div class="dsec dscene dtext"><span class="dlab">Font</span><div class="fonts" id="demoFonts" role="group" aria-label="Title font"></div></div>
+        <div class="dsec dscene dtext"><span class="dlab">Animation</span><div class="chips" id="demoAnims" role="group" aria-label="Text animation"></div></div>
+        <div class="dsec" id="fmtSec"><span class="dlab">Format</span><div class="ratios" id="demoRatios" role="group" aria-label="Canvas format"></div>
           <div class="dims" id="demoCustom"><input type="number" id="demoW" min="64" max="2560" step="1" aria-label="Canvas width"><span class="by">&times;</span><input type="number" id="demoH" min="64" max="2560" step="1" aria-label="Canvas height"><span class="unit">px</span></div>
         </div>
-        <div class="row wide"><label for="demoHud">Camera frame</label><button type="button" class="toggle" id="demoHud" aria-pressed="true"></button></div>
+        <div class="row wide" id="hudRow"><label for="demoHud">Camera frame</label><button type="button" class="toggle" id="demoHud" aria-pressed="true"></button></div>
       </div>
     </section>
     <div class="rhead"><div class="rtitle"><span class="rico" id="fxIco"></span><h2 id="fxName">ASCII</h2></div><button class="link" id="resetBtn" type="button" title="Reset this layer and the adjustments">Reset</button></div>
@@ -1198,6 +1210,7 @@ try {
   else { const o = JSON.parse(localStorage.getItem('glyphr-demo') || '{}'); delete o.w; delete o.h; Object.assign(demo, o); }
 } catch (e) {}
 demo.scene = Math.max(0, Math.min(14, demo.scene | 0)); demo.tanim = Math.max(0, Math.min(9, demo.tanim | 0)); demo.font = Math.max(0, Math.min(TITLE_FONTS.length - 1, demo.font | 0)); demo.hud = demo.hud !== false;
+demo.ov = Object.assign({ on: false, blend: 0, op: 0.9, title: false, hud: false }, demo.ov || {});
 if (demo.w > 2560 || demo.h > 2560) { demo.w = 1920; demo.h = 1080; }
 demo.w = Math.max(64, demo.w | 0 || 1920); demo.h = Math.max(64, demo.h | 0 || 1080);
 const sample = document.createElement('canvas');
@@ -1208,6 +1221,7 @@ function sampleRes(k) {
 }
 sampleRes();
 let sx = sample.getContext('2d');
+const sampleCtx = sx;
 /* Animated demo scenes. Each adapts to any canvas size; the title and the camera frame draw on top. */
 const h1 = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 function stars(n, W, H, S, t, maxY) {
@@ -1676,15 +1690,36 @@ function drawHud(t, W, H, S) {
   sx.fillStyle = 'rgba(255,255,255,.6)';
   sx.fillText(String(Math.floor(secs / 60)).padStart(2, '0') + ':' + String(secs % 60).padStart(2, '0') + ':' + String(Math.floor((t % 1) * 30)).padStart(2, '0'), W - m - 14 * S, H - m - 18 * S);
 }
-function drawSample(ms) {
-  const t = ms / 1000, W = sample.width, H = sample.height, cx = W / 2, cy = H / 2;
-  const S = Math.min(W, H) / 900, ax = W / 900, ay = H / 900;
-  const reset = () => { sx.setLineDash([]); sx.globalCompositeOperation = 'source-over'; sx.globalAlpha = 1; sx.shadowBlur = 0; sx.shadowColor = 'transparent'; sx.lineCap = 'butt'; };
-  reset();
-  (SCENES[demo.scene] || SCENES[0])[1](t, W, H, S, cx, cy, ax, ay);
-  reset();
-  drawTitle(t, W, H, S, cx, cy);
-  if (demo.hud) drawHud(t, W, H, S);
+function paintScene(ctx, W, H, ms, title, hud) {
+  const keep = sx; sx = ctx;
+  try {
+    const t = ms / 1000, cx = W / 2, cy = H / 2;
+    const S = Math.min(W, H) / 900, ax = W / 900, ay = H / 900;
+    const reset = () => { sx.setLineDash([]); sx.globalCompositeOperation = 'source-over'; sx.globalAlpha = 1; sx.shadowBlur = 0; sx.shadowColor = 'transparent'; sx.lineCap = 'butt'; };
+    reset();
+    (SCENES[demo.scene] || SCENES[0])[1](t, W, H, S, cx, cy, ax, ay);
+    reset();
+    if (title) drawTitle(t, W, H, S, cx, cy);
+    if (hud) drawHud(t, W, H, S);
+    reset();
+  } finally { sx = keep; }
+}
+function drawSample(ms) { paintScene(sampleCtx, sample.width, sample.height, ms, true, demo.hud); }
+/* Scene over a photo or video: the picture first, then the animated scene blended on top. */
+const OV_BLENDS = [['Screen', 'screen'], ['Add', 'lighter'], ['Overlay', 'overlay'], ['Soft light', 'soft-light'], ['Lighten', 'lighten'], ['Normal', 'source-over']];
+const compC = document.createElement('canvas'), compX = compC.getContext('2d');
+const scnC = document.createElement('canvas'), scnX = scnC.getContext('2d');
+function drawCompose(ms) {
+  const k = Math.min(1, Math.max(canvas.width, canvas.height) / Math.max(natW, natH));
+  const w = Math.max(2, Math.round(natW * k)), h = Math.max(2, Math.round(natH * k));
+  if (compC.width !== w || compC.height !== h) { compC.width = w; compC.height = h; scnC.width = w; scnC.height = h; }
+  compX.globalCompositeOperation = 'source-over'; compX.globalAlpha = 1;
+  if (srcKind !== 'video' || srcEl.readyState >= 2) compX.drawImage(srcEl, 0, 0, w, h);
+  paintScene(scnX, w, h, ms, demo.ov.title, demo.ov.hud);
+  compX.globalAlpha = demo.ov.op;
+  compX.globalCompositeOperation = (OV_BLENDS[demo.ov.blend] || OV_BLENDS[0])[1];
+  compX.drawImage(scnC, 0, 0);
+  compX.globalAlpha = 1; compX.globalCompositeOperation = 'source-over';
 }
 
 /* ---------- source management ---------- */
@@ -1695,7 +1730,8 @@ function setSource(el, kind, w, h, label) {
   canvas.width = Math.max(2, Math.round(w * s)); canvas.height = Math.max(2, Math.round(h * s));
   $('#inStatus').textContent = label;
   $('#playBtn').hidden = kind !== 'video';
-  $('#demoFields').hidden = kind !== 'sample'; $('#demoBack').hidden = kind === 'sample';
+  $('#demoBack').hidden = kind === 'sample';
+  if (typeof syncOvUI === 'function') syncOvUI();
   $('#playBtn').textContent = 'Pause';
   $('.live').textContent = (kind === 'video' ? 'Live · ' : '') + canvas.width + ' × ' + canvas.height;
   applyZoom();
@@ -2240,7 +2276,18 @@ function applyDemoSize(w, h) {
 }
 let demoCustom = false;
 function pressAll(sel, i) { document.querySelectorAll(sel).forEach((b, j) => b.setAttribute('aria-pressed', j === i)); }
+function syncOvUI() {
+  const file = srcKind !== 'sample', on = !!demo.ov.on;
+  $('#ovSec').hidden = !file; $('#fmtSec').hidden = file; $('#hudRow').hidden = file;
+  $('#ovOn').setAttribute('aria-pressed', on); $('#ovOpts').hidden = !on; $('#ovNote').hidden = on;
+  document.querySelectorAll('#demoFields .dscene').forEach(e => { e.hidden = file && !on; });
+  document.querySelectorAll('#demoFields .dtext').forEach(e => { if (file && on) e.hidden = !demo.ov.title; });
+  pressAll('#ovBlend .chip', demo.ov.blend);
+  const op = $('#ovOp'); op.value = demo.ov.op; $('#ovOpV').textContent = Math.round(demo.ov.op * 100) + '%'; paintRange(op);
+  $('#ovTitle').setAttribute('aria-pressed', !!demo.ov.title); $('#ovHud').setAttribute('aria-pressed', !!demo.ov.hud);
+}
 function syncDemoUI() {
+  syncOvUI();
   let i = DEMO_SIZES.findIndex(d => d[1] === demo.w && d[2] === demo.h);
   if (demoCustom || i < 0) i = DEMO_SIZES.length - 1;
   pressAll('#demoRatios .ratio', i);
@@ -2300,6 +2347,16 @@ function initDemoUI() {
     };
     rt.append(b);
   });
+  const ob = $('#ovBlend');
+  OV_BLENDS.forEach((bm, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = bm[0];
+    b.onclick = () => { demo.ov.blend = i; saveDemo(); syncOvUI(); };
+    ob.append(b);
+  });
+  $('#ovOn').onclick = () => { demo.ov.on = !demo.ov.on; saveDemo(); srcDirty = true; syncOvUI(); };
+  $('#ovTitle').onclick = () => { demo.ov.title = !demo.ov.title; saveDemo(); syncOvUI(); };
+  $('#ovHud').onclick = () => { demo.ov.hud = !demo.ov.hud; saveDemo(); syncOvUI(); };
+  $('#ovOp').oninput = e => { demo.ov.op = +e.target.value; $('#ovOpV').textContent = Math.round(demo.ov.op * 100) + '%'; saveDemo(); };
   const hud = $('#demoHud');
   hud.setAttribute('aria-pressed', demo.hud);
   hud.onclick = () => { demo.hud = !demo.hud; hud.setAttribute('aria-pressed', demo.hud); saveDemo(); refreshThumbs(); };
@@ -2443,7 +2500,9 @@ function render(ms) {
   if (srcKind === 'video' && srcEl.readyState >= 2) srcDirty = true;
   ensureFbos();
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
-  if (srcDirty) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, srcEl); srcDirty = false; }
+  const ovOn = srcKind !== 'sample' && demo.ov.on;
+  if (ovOn) { drawCompose(ms); srcDirty = true; }
+  if (srcDirty) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ovOn ? compC : srcEl); srcDirty = false; }
   gl.viewport(0, 0, canvas.width, canvas.height);
   const act = layers.filter(l => l.on);
   let input = srcTex;
@@ -2739,7 +2798,7 @@ function resetEverything() {
   if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
   $('#file').value = '';
   layers = [newLayer('ascii')]; sel = 0; adj = { ...ADJ0 }; adjAnims = {};
-  Object.assign(demo, { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0, font: 0 });
+  Object.assign(demo, { text: 'Glyphr', sub: 'BY YEEZIK', w: 1920, h: 1080, scene: 0, hud: true, tanim: 0, font: 0, ov: { on: false, blend: 0, op: 0.9, title: false, hud: false } });
   demoCustom = false;
   $('#demoText').value = demo.text; $('#demoSub').value = demo.sub;
   $('#demoHud').setAttribute('aria-pressed', 'true');
