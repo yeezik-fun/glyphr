@@ -79,6 +79,8 @@ h2, h3 { margin: 0; font-size: 10.5px; font-weight: 500; color: var(--muted); le
 .ai > button { width: 100%; background: none; border: 0; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--muted); }
 .tile { display: block; width: 100%; width: 44px; aspect-ratio: 1; border-radius: 24%; overflow: hidden; background: var(--field) center / cover no-repeat; box-shadow: 0 1px 2px rgba(0,0,0,.5), 0 4px 12px rgba(0,0,0,.25), inset 0 0 0 .5px rgba(255,255,255,.12); transition: transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s; }
 .tile svg { display: block; width: 100%; height: 100%; }
+.tile { position: relative; }
+.tile .num { position: absolute; top: 3px; left: 3px; font: 600 8px/1 var(--mono); font-style: normal; color: #fff; background: rgba(0,0,0,.6); padding: 2px 3px; border-radius: 3px; }
 .ai > button:hover .tile { transform: translateY(-2px); }
 .ai > button:active .tile { transform: scale(.94); }
 .ai > button:hover, .ai > button[aria-pressed="true"] { color: var(--fg); }
@@ -451,12 +453,23 @@ function ensureFont(spec, onReady) {
   fontsAsked.add(spec);
   document.fonts.load(spec).then(() => onReady && onReady()).catch(() => {});
 }
+const GMAPS = [
+  { name: 'Thermal', c: ['#05001a', '#3b0f8c', '#b21aa0', '#ff3d3d', '#ffa31a', '#fff6a0'] },
+  { name: 'Night Vision', c: ['#000800', '#0b3d0b', '#3aa83a', '#c8ff9a'] },
+  { name: 'Infrared', c: ['#14002b', '#7a0f6b', '#ff1a8c', '#ffd1e8'] },
+  { name: 'Sepia', c: ['#1a0f08', '#6b4423', '#c49a6c', '#f6e7c8'] },
+  { name: 'Duotone', c: ['#0b0b2d', '#ff4fa3', '#fff0f7'] },
+  { name: 'Sunset', c: ['#12002a', '#7a1a8a', '#ff5a5a', '#ffb84d', '#fff2b0'] },
+  { name: 'Custom', c: null }
+];
+const HUD_STYLES = ['Camcorder', 'CCTV', 'Digicam', 'Target Lock', 'Viewfinder'];
 const PALETTES = [
   { name: 'Game Boy', c: ['#0f380f', '#306230', '#8bac0f', '#9bbc0f'] },
   { name: 'PICO-8', c: ['#000000', '#1d2b53', '#7e2553', '#008751', '#ab5236', '#5f574f', '#c2c3c7', '#fff1e8', '#ff004d', '#ffa300', '#ffec27', '#00e436', '#29adff', '#83769c', '#ff77a8', '#ffccaa'] },
   { name: 'CGA', c: ['#000000', '#55ffff', '#ff55ff', '#ffffff'] },
   { name: 'Commodore 64', c: ['#000000', '#ffffff', '#880000', '#aaffee', '#cc44cc', '#00cc55', '#0000aa', '#eeee77', '#dd8855', '#664400', '#ff7777', '#333333', '#777777', '#aaff66', '#0088ff', '#bbbbbb'] },
   { name: 'Yeezik', c: ['#0b0b0d', '#5b2cf0', '#ff4fa3', '#46c8e6', '#ffba50', '#f2f2ee'] },
+  { name: 'Teletext', c: ['#000000', '#ff0000', '#00ff00', '#ffff00', '#0000ff', '#ff00ff', '#00ffff', '#ffffff'] },
   { name: 'Custom', c: null }
 ];
 const ADJ = [
@@ -488,17 +501,17 @@ const EFFECTS = {
   dither: { name: 'Dithering', groups: [
     { controls: [
       { id: 'px', label: 'Pixel Size', min: 1, max: 12, step: 1, def: 2, unit: 'px' },
-      { id: 'matrix', label: 'Matrix', type: 'select', options: ['Bayer 2×2', 'Bayer 4×4', 'Bayer 8×8', 'Noise'], def: 2 },
+      { id: 'matrix', label: 'Matrix', type: 'select', options: ['Bayer 2×2', 'Bayer 4×4', 'Bayer 8×8', 'Noise', 'None'], def: 2 },
       { id: 'levels', label: 'Levels', min: 2, max: 8, step: 1, def: 2, showIf: p => !isPal(p) },
       { id: 'spread', label: 'Spread', min: 0, max: 2, step: 0.05, def: 1 }
     ]},
     { controls: [
       { id: 'cmode', label: 'Mode', type: 'select', options: ['Full color', 'Two-tone', 'Palette'], def: 0 },
       { id: 'pal', label: 'Palette', type: 'select', options: PALETTES.map(p => p.name), def: 0, showIf: isPal },
-      { id: 'c1', label: 'Color 1', type: 'color', def: '#0b0b0d', showIf: p => isPal(p) && p.pal === 5 },
-      { id: 'c2', label: 'Color 2', type: 'color', def: '#5b2cf0', showIf: p => isPal(p) && p.pal === 5 },
-      { id: 'c3', label: 'Color 3', type: 'color', def: '#ff4fa3', showIf: p => isPal(p) && p.pal === 5 },
-      { id: 'c4', label: 'Color 4', type: 'color', def: '#f2f2ee', showIf: p => isPal(p) && p.pal === 5 },
+      { id: 'c1', label: 'Color 1', type: 'color', def: '#0b0b0d', showIf: p => isPal(p) && !PALETTES[p.pal].c },
+      { id: 'c2', label: 'Color 2', type: 'color', def: '#5b2cf0', showIf: p => isPal(p) && !PALETTES[p.pal].c },
+      { id: 'c3', label: 'Color 3', type: 'color', def: '#ff4fa3', showIf: p => isPal(p) && !PALETTES[p.pal].c },
+      { id: 'c4', label: 'Color 4', type: 'color', def: '#f2f2ee', showIf: p => isPal(p) && !PALETTES[p.pal].c },
       { id: 'ink', label: 'Ink', type: 'color', def: '#141414', showIf: p => p.cmode === 1 },
       { id: 'paper', label: 'Paper', type: 'color', def: '#f1eee4', showIf: p => p.cmode === 1 }
     ]}
@@ -536,9 +549,13 @@ const EFFECTS = {
       { id: 'grid', label: 'Screen Size', min: 4, max: 40, step: 1, def: 10, unit: 'px' },
       { id: 'dscale', label: 'Dot Scale', min: 0.4, max: 1.6, step: 0.05, def: 1.05 },
       { id: 'angle', label: 'Rotation', min: 0, max: 90, step: 1, def: 0, unit: '°', mul: DEG },
-      { id: 'kamt', label: 'Black Ink', min: 0, max: 1, step: 0.05, def: 1 }
+      { id: 'kamt', label: 'Black Ink', min: 0, max: 1, step: 0.05, def: 1, showIf: p => p.mode === 0 }
     ]},
     { controls: [
+      { id: 'mode', label: 'Inks', type: 'select', options: ['CMYK', 'Riso 2-ink'], def: 0 },
+      { id: 'ink1', label: 'Ink 1', type: 'color', def: '#ff4fa3', showIf: p => p.mode === 1 },
+      { id: 'ink2', label: 'Ink 2', type: 'color', def: '#2b6cff', showIf: p => p.mode === 1 },
+      { id: 'offset', label: 'Misregister', min: 0, max: 20, step: 0.5, def: 4, unit: 'px', showIf: p => p.mode === 1 },
       { id: 'paper', label: 'Paper', type: 'color', def: '#f4f1ea' }
     ]}
   ]},
@@ -574,11 +591,74 @@ const EFFECTS = {
   threshold: { name: 'Threshold', groups: [
     { controls: [
       { id: 'level', label: 'Level', min: 0, max: 1, step: 0.01, def: 0.5 },
-      { id: 'soft', label: 'Softness', min: 0, max: 0.5, step: 0.01, def: 0.02 }
+      { id: 'soft', label: 'Softness', min: 0, max: 0.5, step: 0.01, def: 0.02 },
+      { id: 'grit', label: 'Grit', min: 0, max: 1, step: 0.01, def: 0 }
     ]},
     { controls: [
       { id: 'ink', label: 'Ink', type: 'color', def: '#0b0b0d' },
       { id: 'paper', label: 'Paper', type: 'color', def: '#f2f2ee' }
+    ]}
+  ]},
+  gmap: { name: 'Gradient Map', groups: [
+    { controls: [
+      { id: 'map', label: 'Gradient', type: 'select', options: GMAPS.map(g => g.name), def: 0 },
+      { id: 'g1', label: 'Shadows', type: 'color', def: '#0b0b2d', showIf: p => !GMAPS[p.map].c },
+      { id: 'g2', label: 'Midtones', type: 'color', def: '#ff4fa3', showIf: p => !GMAPS[p.map].c },
+      { id: 'g3', label: 'Highlights', type: 'color', def: '#fff3c4', showIf: p => !GMAPS[p.map].c },
+      { id: 'amount', label: 'Amount', min: 0, max: 1, step: 0.01, def: 1 }
+    ]}
+  ]},
+  film: { name: 'Film', groups: [
+    { controls: [
+      { id: 'tint', label: 'Look', type: 'select', options: ['Neutral', 'Warm', 'Cool', 'Green', 'Faded'], def: 0 },
+      { id: 'grain', label: 'Grain', min: 0, max: 1, step: 0.01, def: 0.25 },
+      { id: 'sharpen', label: 'Sharpen', min: 0, max: 2, step: 0.05, def: 0.3 },
+      { id: 'bloom', label: 'Bloom', min: 0, max: 1, step: 0.01, def: 0.15 },
+      { id: 'flash', label: 'Flash', min: 0, max: 1, step: 0.01, def: 0 },
+      { id: 'vignette', label: 'Vignette', min: 0, max: 1.5, step: 0.05, def: 0.5 },
+      { id: 'burn', label: 'Burn Edges', min: 0, max: 1, step: 0.01, def: 0 }
+    ]}
+  ]},
+  hud: { name: 'HUD', groups: [
+    { controls: [
+      { id: 'style', label: 'Style', type: 'select', options: HUD_STYLES, def: 0 },
+      { id: 'color', label: 'Color', type: 'color', def: '#ff8a2a', showIf: p => p.style === 3 },
+      { id: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01, def: 1 }
+    ]}
+  ]},
+  lines: { name: 'Wave Lines', groups: [
+    { controls: [
+      { id: 'gap', label: 'Line Gap', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
+      { id: 'amp', label: 'Height', min: 0, max: 160, step: 1, def: 34, unit: 'px' },
+      { id: 'thick', label: 'Thickness', min: 0.5, max: 6, step: 0.1, def: 1.3, unit: 'px' },
+      { id: 'cut', label: 'Cutoff', min: 0, max: 1, step: 0.01, def: 0.08 },
+      { id: 'dotted', label: 'Dotted', type: 'toggle', def: false }
+    ]},
+    { controls: [
+      { id: 'cmode', label: 'Mode', type: 'select', options: ['Original', 'Mono'], def: 0 },
+      { id: 'ink', label: 'Ink', type: 'color', def: '#a8ff8c', showIf: p => p.cmode === 1 },
+      { id: 'bg', label: 'Background', type: 'color', def: '#000000' }
+    ]}
+  ]},
+  hatch: { name: 'Crosshatch', groups: [
+    { controls: [
+      { id: 'spacing', label: 'Spacing', min: 3, max: 20, step: 0.5, def: 6, unit: 'px' },
+      { id: 'width', label: 'Stroke', min: 0.3, max: 3, step: 0.05, def: 0.9, unit: 'px' },
+      { id: 'wobble', label: 'Hand Wobble', min: 0, max: 1, step: 0.01, def: 0.45 },
+      { id: 'density', label: 'Density', min: 0.3, max: 1.6, step: 0.05, def: 1 }
+    ]},
+    { controls: [
+      { id: 'ink', label: 'Ink', type: 'color', def: '#1d2c96' },
+      { id: 'paper', label: 'Paper', type: 'color', def: '#f3f1ea' }
+    ]}
+  ]},
+  prism: { name: 'Prism', groups: [
+    { controls: [
+      { id: 'pos', label: 'Position', min: 0, max: 1, step: 0.01, def: 0.55 },
+      { id: 'height', label: 'Band Height', min: 0.05, max: 1, step: 0.01, def: 0.32 },
+      { id: 'amount', label: 'Amount', min: 0, max: 1, step: 0.01, def: 0.85 },
+      { id: 'smear', label: 'Smear', min: 0, max: 300, step: 1, def: 90, unit: 'px' },
+      { id: 'drift', label: 'Drift', min: 0, max: 2, step: 0.05, def: 0.3 }
     ]}
   ]}
 };
@@ -596,6 +676,28 @@ const hasAscii = () => layers.some(l => l.on && l.fx === 'ascii');
 const asciiP = () => (layers.find(l => l.on && l.fx === 'ascii') || L()).ps.ascii;
 
 const PRESETS = [
+  { name: 'Bit Press', layers: [{ fx: 'dither', p: { px: 1, matrix: 2, levels: 2, cmode: 1, ink: '#0a0a0a', paper: '#f5f5f2' } }], a: { con: 30 } },
+  { name: 'Terminal Print', layers: [{ fx: 'dots', p: { grid: 7, shape: 1, cmode: 1, ink: '#39ff6a', bg: '#010a03', sizeBy: 1, dscale: 0.78, angle: 0 } }, { fx: 'crt', p: { curve: 0, scan: 0.35, mask: 0.2, glow: 0.8, vig: 0.6, flick: 0.1 } }], a: { con: 25 } },
+  { name: 'Heat Signature', layers: [{ fx: 'gmap', p: { map: 0 } }], a: { con: 15 } },
+  { name: 'Riso Drum', layers: [{ fx: 'halftone', p: { mode: 1, grid: 7, ink1: '#ff4fa3', ink2: '#2b6cff', offset: 5, paper: '#f2ede3' } }], a: { con: 15 } },
+  { name: 'Sprite Sheet', layers: [{ fx: 'dither', p: { px: 6, matrix: 1, cmode: 0, levels: 4, spread: 0.35 } }], a: { sat: 35, con: 20 } },
+  { name: 'Tape Static', layers: [{ fx: 'glitch', p: { amount: 0.22, slices: 20, shift: 4, speed: 0.6 } }, { fx: 'vhs', p: { chroma: 7, track: 2, noise: 0.3, scan: 0.45 } }, { fx: 'hud', p: { style: 0 } }], a: { sat: -10 } },
+  { name: 'Security Feed', layers: [{ fx: 'film', p: { tint: 3, grain: 0.7, sharpen: 0.2, vignette: 0.8, bloom: 0 } }, { fx: 'hud', p: { style: 1 } }], a: { sat: -60, con: 10 } },
+  { name: 'Digicam 2003', layers: [{ fx: 'film', p: { tint: 1, sharpen: 1.4, grain: 0.15, flash: 0.6, vignette: 0.6, bloom: 0.3 } }, { fx: 'hud', p: { style: 2 } }], a: { sat: 15, con: 15 } },
+  { name: 'Copier Zine', layers: [{ fx: 'threshold', p: { level: 0.5, soft: 0.03, grit: 0.7, ink: '#111111', paper: '#f4f4f0' } }], a: { con: 20 } },
+  { name: 'Film Burn', layers: [{ fx: 'film', p: { tint: 4, burn: 0.8, grain: 0.35, vignette: 0.9, bloom: 0.1 } }], a: { sat: -40 } },
+  { name: 'Dot Terrain', layers: [{ fx: 'lines', p: { gap: 7, amp: 40, thick: 1.4, dotted: true, cmode: 1, ink: '#a8ff8c', bg: '#000000', cut: 0.12 } }], a: { con: 20 } },
+  { name: 'Billboard Dots', layers: [{ fx: 'dots', p: { grid: 12, shape: 0, cmode: 0, bg: '#050505', dscale: 1.05, sizeBy: 1, angle: 0 } }, { fx: 'crt', p: { curve: 0, scan: 0, mask: 0.15, glow: 0.55, vig: 0.6, flick: 0.15 } }], a: { sat: 30, con: 15, bri: -15 } },
+  { name: 'Target Lock', layers: [{ fx: 'film', p: { grain: 0.3, vignette: 0.7, bloom: 0 } }, { fx: 'hud', p: { style: 3, color: '#ff8a2a' } }], a: { sat: -100, con: 10, bri: -10 } },
+  { name: 'Knockoff Pixels', layers: [{ fx: 'dither', p: { px: 8, matrix: 4, cmode: 2, pal: 1 } }], a: { sat: 40, con: 15 } },
+  { name: 'Glyph Field', layers: [{ fx: 'ascii', p: { cell: 9, charset: 3, cmode: 0, bg: '#2e2e30', intensity: 1.25 } }], a: { sat: 25, con: 20 } },
+  { name: 'Time Slit', layers: [{ fx: 'prism', p: {} }], a: {} },
+  { name: 'Dot Press', layers: [{ fx: 'dots', p: { grid: 7, cmode: 1, ink: '#0d0d0d', bg: '#f7f7f4', sizeBy: 0, angle: 45 } }], a: { con: 25 } },
+  { name: 'Grit Print', layers: [{ fx: 'dots', p: { grid: 6, cmode: 1, ink: '#f2f2ee', bg: '#0b0b0b', sizeBy: 1, angle: 45 } }, { fx: 'film', p: { grain: 0.6, vignette: 0.4, sharpen: 0, bloom: 0 } }], a: { con: 30 } },
+  { name: 'Code Overlay', layers: [{ fx: 'ascii', p: { cell: 10, charset: 3, cmode: 2, fg: '#59ff7a', bg: '#020a04', intensity: 1.7 } }], a: { con: 30 } },
+  { name: 'Biro Scribble', layers: [{ fx: 'hatch', p: { density: 0.85 } }], a: { con: 15 } },
+  { name: 'Fat Pixel', layers: [{ fx: 'dither', p: { px: 14, matrix: 4, cmode: 0, levels: 8, spread: 0 } }], a: {} },
+  { name: 'Teletext', layers: [{ fx: 'dither', p: { px: 6, matrix: 0, cmode: 2, pal: 5 } }], a: { sat: 60, con: 30 } },
   { name: 'Terminal', layers: [{ fx: 'ascii', p: { cell: 10, charset: 3, cmode: 1, fg: '#3dff74', bg: '#020a04', intensity: 1.2 } }], a: { con: 20 } },
   { name: 'Block Party', layers: [{ fx: 'ascii', p: { cell: 14, charset: 1, cmode: 0, bg: '#000000', intensity: 1.1 } }], a: { sat: 30 } },
   { name: 'ASCII TV', layers: [{ fx: 'ascii', p: { cell: 12 } }, { fx: 'crt', p: {} }], a: {} },
@@ -650,6 +752,8 @@ vec3 src(vec2 uv){
 }
 float luma(vec3 c){ return dot(c, vec3(.299,.587,.114)); }
 float hash(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f); return mix(mix(hash(i), hash(i+vec2(1.,0.)), f.x), mix(hash(i+vec2(0.,1.)), hash(i+1.), f.x), f.y); }
+vec3 hue2rgb(float h){ return clamp(abs(mod(h*6. + vec3(0.,4.,2.), 6.) - 3.) - 1., 0., 1.); }
 `;
 
 const FS = {
@@ -683,7 +787,7 @@ float bayer8(vec2 a){ return bayer4(.5*a)*.25 + bayer2(a); }
 void main(){
   vec2 p = floor(gl_FragCoord.xy/u_px);
   vec3 c = src((p+0.5)*u_px/u_res);
-  float t = u_matrix < 0.5 ? bayer2(p) : u_matrix < 1.5 ? bayer4(p) : u_matrix < 2.5 ? bayer8(p) : hash(p);
+  float t = u_matrix < 0.5 ? bayer2(p) : u_matrix < 1.5 ? bayer4(p) : u_matrix < 2.5 ? bayer8(p) : u_matrix < 3.5 ? hash(p) : 0.5;
   t = (t-0.5)*u_spread + 0.5;
   vec3 col;
   float L = u_levels-1.;
@@ -751,7 +855,17 @@ void main(){
   o = vec4(clamp(col, 0., 1.), 1.);
 }`,
 halftone: HEAD + `
-uniform float u_grid, u_dscale, u_angle, u_kamt; uniform vec3 u_paper;
+uniform float u_grid, u_dscale, u_angle, u_kamt, u_mode, u_offset; uniform vec3 u_paper, u_ink1, u_ink2;
+float rdot(float ang, vec2 off, int ch){
+  float ca = cos(ang), sa = sin(ang); mat2 R = mat2(ca, -sa, sa, ca);
+  vec2 r = R*(gl_FragCoord.xy + off - u_res*0.5);
+  vec2 cc = (floor(r/u_grid)+0.5)*u_grid;
+  vec3 c = src((transpose(R)*cc + u_res*0.5)/u_res);
+  float l = luma(c);
+  float val = ch == 0 ? clamp((c.r - c.b)*0.9 + (1.-l)*0.35, 0., 1.) : clamp(1. - l, 0., 1.);
+  float rad = sqrt(val)*0.7071*u_grid*u_dscale;
+  return 1. - smoothstep(rad-0.7, rad+0.7, length(r-cc));
+}
 vec4 cmyk(vec3 c){ float k = 1. - max(c.r, max(c.g, c.b)); float d = max(1e-4, 1. - k); return vec4((1.-c.r-k)/d, (1.-c.g-k)/d, (1.-c.b-k)/d, k); }
 float screenDot(float ang, int ch){
   float ca = cos(ang), sa = sin(ang); mat2 R = mat2(ca, -sa, sa, ca);
@@ -765,6 +879,15 @@ float screenDot(float ang, int ch){
 }
 void main(){
   float d = 0.0174533;
+  if (u_mode > 0.5) {
+    float a1 = rdot(u_angle + 15.*d, vec2(u_offset, -u_offset*0.6), 0);
+    float a2 = rdot(u_angle + 45.*d, vec2(0.), 1);
+    vec3 pc = u_paper;
+    pc *= mix(vec3(1.), u_ink1, a1*0.92);
+    pc *= mix(vec3(1.), u_ink2, a2*0.92);
+    pc *= 0.96 + 0.08*vnoise(gl_FragCoord.xy*0.08);
+    o = vec4(pc, 1.); return;
+  }
   float c = screenDot(u_angle + 15.*d, 0), m = screenDot(u_angle + 75.*d, 1);
   float y = screenDot(u_angle, 2), k = screenDot(u_angle + 45.*d, 3);
   vec3 col = u_paper;
@@ -836,11 +959,124 @@ void main(){
   o = vec4(clamp(col*e, 0., 1.), 1.);
 }`,
 threshold: HEAD + `
-uniform float u_level, u_soft; uniform vec3 u_ink, u_paper;
+uniform float u_level, u_soft, u_grit; uniform vec3 u_ink, u_paper;
 void main(){
   float l = luma(src(v_uv));
+  vec2 q = gl_FragCoord.xy;
+  l += ((vnoise(q*0.35) - 0.5)*0.5 + (hash(q) - 0.5)*0.35)*u_grit;
+  l -= u_grit*0.5*step(0.992, hash(vec2(floor(q.x/2.), 3.)))*vnoise(vec2(q.x*0.1, q.y*0.01));
+  l += u_grit*0.6*step(0.9985, hash(floor(q/3.)));
   float a = smoothstep(u_level - u_soft - 1e-3, u_level + u_soft + 1e-3, l);
   o = vec4(mix(u_ink, u_paper, a), 1.);
+}`,
+gmap: HEAD + `
+uniform vec3 u_stops[6]; uniform float u_stopN, u_amount;
+void main(){
+  vec3 c = src(v_uv);
+  float x = clamp(luma(c), 0., 1.)*(u_stopN - 1.);
+  int i = int(min(floor(x), u_stopN - 2.));
+  vec3 g = mix(u_stops[i], u_stops[i+1], clamp(x - float(i), 0., 1.));
+  o = vec4(mix(c, g, u_amount), 1.);
+}`,
+film: HEAD + `
+uniform float u_tint, u_grain, u_sharpen, u_bloom, u_flash, u_vignette, u_burn;
+void main(){
+  vec2 px = 1./u_res, uv = v_uv;
+  vec3 c = src(uv);
+  vec3 n = (src(uv + vec2(px.x, 0.)) + src(uv - vec2(px.x, 0.)) + src(uv + vec2(0., px.y)) + src(uv - vec2(0., px.y)))*0.25;
+  c += (c - n)*u_sharpen*2.;
+  vec3 b = vec3(0.);
+  for (int i = 0; i < 8; i++) { float a = float(i)*0.785398; b += src(uv + vec2(cos(a), sin(a))*px*10.); }
+  c += max(b/8. - 0.55, 0.)*u_bloom*2.;
+  if (u_tint > 0.5 && u_tint < 1.5) c *= vec3(1.08, 1.0, 0.86);
+  else if (u_tint > 1.5 && u_tint < 2.5) c *= vec3(0.88, 1.0, 1.1);
+  else if (u_tint > 2.5 && u_tint < 3.5) { float l = luma(c); c = mix(c, vec3(l*0.82, l*1.02, l*0.86), 0.75); }
+  else if (u_tint > 3.5) c = mix(c, vec3(luma(c)), 0.35)*0.9 + vec3(0.08, 0.07, 0.05);
+  vec2 q = uv - 0.5;
+  c += u_flash*0.45*max(0., 1. - length(q*vec2(1.2, 1.6))*1.9);
+  c *= 1. - u_vignette*dot(q, q)*1.7;
+  float gr = hash(gl_FragCoord.xy*0.5 + fract(u_time*13.)*vec2(71.3, 19.7)) - 0.5;
+  c += gr*u_grain*0.38;
+  if (u_burn > 0.) {
+    float e = min(min(uv.x, 1. - uv.x), min(uv.y, 1. - uv.y));
+    float nz = vnoise(uv*7. + u_time*0.05)*0.6 + vnoise(uv*23.)*0.4;
+    float d = e - (nz - 0.5)*0.07*u_burn;
+    float w = 0.13*u_burn;
+    vec3 glow = mix(vec3(1., 0.85, 0.45), vec3(0.95, 0.35, 0.05), smoothstep(w*0.25, w*0.75, d));
+    vec3 burnt = mix(vec3(0.02, 0.01, 0.0), glow, smoothstep(w*0.05, w*0.35, d));
+    c = mix(burnt, c, smoothstep(w*0.5, w, d));
+  }
+  o = vec4(clamp(c, 0., 1.), 1.);
+}`,
+hud: HEAD + `
+uniform sampler2D u_hud; uniform float u_opacity;
+void main(){
+  vec3 c = src(v_uv);
+  vec4 h = texture(u_hud, v_uv);
+  o = vec4(mix(c, h.rgb, h.a*u_opacity), 1.);
+}`,
+lines: HEAD + `
+uniform float u_gap, u_amp, u_thick, u_cut, u_dotted, u_cmode; uniform vec3 u_ink, u_bg;
+void main(){
+  vec2 p = gl_FragCoord.xy;
+  vec3 col = u_bg;
+  float best = 0.;
+  int N = int(ceil(u_amp/u_gap)) + 1;
+  float base = floor(p.y/u_gap);
+  for (int j = 0; j < 40; j++) {
+    if (j > N) break;
+    float row = base - float(j);
+    float ry = row*u_gap;
+    vec3 c = src(vec2(p.x, ry)/u_res);
+    float l = luma(c);
+    if (l < u_cut) continue;
+    float y = ry + l*u_amp;
+    float a = 1. - smoothstep(u_thick*0.5, u_thick*0.5 + 1., abs(p.y - y));
+    if (u_dotted > 0.5) { float m = mod(p.x, u_gap*0.5); a *= 1. - smoothstep(u_thick*0.6, u_thick*0.6 + 1., abs(m - u_gap*0.25)); }
+    if (a > best) { best = a; col = mix(u_bg, u_cmode < 0.5 ? c : u_ink*(0.4 + 0.6*l), a); }
+  }
+  o = vec4(col, 1.);
+}`,
+hatch: HEAD + `
+uniform float u_spacing, u_width, u_wobble, u_density; uniform vec3 u_ink, u_paper;
+float hl(vec2 p, vec2 dir, float off){
+  float w = (vnoise(p*0.04 + off) - 0.5)*u_wobble*u_spacing*1.2;
+  float v = dot(p, dir)/u_spacing + w/u_spacing + off;
+  float d = abs(fract(v) - 0.5)*u_spacing;
+  float press = 0.75 + 0.5*vnoise(p*0.02 + off*3.);
+  return 1. - smoothstep(u_width*press*0.5, u_width*press*0.5 + 0.9, d);
+}
+void main(){
+  vec2 p = gl_FragCoord.xy;
+  float l = clamp(luma(src(v_uv))/u_density, 0., 1.);
+  float ink = 0.;
+  if (l < 0.88) ink = max(ink, hl(p, normalize(vec2(1., 1.)), 0.13));
+  if (l < 0.66) ink = max(ink, hl(p, normalize(vec2(1., -1.)), 0.41));
+  if (l < 0.46) ink = max(ink, hl(p, vec2(1., 0.), 0.77));
+  if (l < 0.28) ink = max(ink, hl(p, normalize(vec2(1., 2.4)), 0.29));
+  if (l < 0.12) ink = max(ink, 0.85);
+  vec3 paper = u_paper*(0.97 + 0.05*vnoise(p*0.05));
+  o = vec4(mix(paper, u_ink, ink*0.92), 1.);
+}`,
+prism: HEAD + `
+uniform float u_pos, u_height, u_amount, u_smear, u_drift;
+void main(){
+  vec2 uv = v_uv;
+  vec3 c = src(uv);
+  float cy = u_pos + sin(u_time*u_drift)*0.06;
+  float dy = (uv.y - cy)/max(0.02, u_height*0.5);
+  float band = 1. - smoothstep(0.6, 1., abs(dy));
+  if (band > 0.) {
+    vec3 s = vec3(0.);
+    float st = u_smear/u_res.y;
+    for (int i = -6; i <= 6; i++) s += src(vec2(uv.x, uv.y + float(i)*st/6.));
+    s /= 13.;
+    float streak = 0.55 + 0.45*hash(vec2(floor(gl_FragCoord.x/2.), floor(u_time*12.)));
+    vec3 rb = hue2rgb(fract(dy*0.5 + 0.5));
+    vec3 lit = s*rb*1.9*streak + rb*0.12*streak;
+    c = mix(c, lit, band*u_amount);
+  }
+  o = vec4(clamp(c, 0., 1.), 1.);
 }`,
 present: `#version 300 es
 precision highp float;
@@ -1771,7 +2007,19 @@ const EFFECT_ART = (() => {
   for (let y = 11; y < 45; y += 3) crt += '<rect x="9" y="' + y + '" width="42" height="1" fill="#000" opacity=".35"/>';
   crt += '<rect x="22" y="49" width="16" height="3" rx="1.5" fill="#3a3a42"/>';
   const thr = '<rect width="60" height="60" fill="#f2f2ee"/><path d="M0 60V34c8-6 14 4 22-4s10-18 20-16 12 10 18 6v40z" fill="#0b0b0d"/><circle cx="20" cy="20" r="8" fill="#0b0b0d"/>';
-  return { ascii: svg(ascii), dither: svg(dith), dots: svg(dots), vhs: svg(vhs), halftone: svg(half), sort: svg(sort), glitch: svg(glitch), crt: svg(crt), threshold: svg(thr) };
+  const gmap = '<defs><linearGradient id="IDgm" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#05001a"/><stop offset=".3" stop-color="#3b0f8c"/><stop offset=".5" stop-color="#b21aa0"/><stop offset=".7" stop-color="#ff3d3d"/><stop offset=".85" stop-color="#ffa31a"/><stop offset="1" stop-color="#fff6a0"/></linearGradient><radialGradient id="IDgm2" cx=".55" cy=".42" r=".38"><stop offset="0" stop-color="#fff6a0"/><stop offset=".45" stop-color="#ff7a1a"/><stop offset="1" stop-color="#ff3d3d" stop-opacity="0"/></radialGradient></defs><rect width="60" height="60" fill="url(#IDgm)"/><rect width="60" height="60" fill="url(#IDgm2)"/>';
+  let film = '<rect width="60" height="60" fill="#14110d"/><rect x="10" y="8" width="40" height="44" rx="2" fill="#c9a46a"/><path d="M10 52 L10 30 Q16 40 24 44 T50 52Z" fill="#2a1406"/><path d="M10 30 Q16 40 24 44 T50 52" stroke="#ff8a1a" stroke-width="2" fill="none"/>';
+  for (let y = 6; y < 58; y += 8) film += '<rect x="3" y="' + y + '" width="4" height="4" rx="1" fill="#e8e2d6"/><rect x="53" y="' + y + '" width="4" height="4" rx="1" fill="#e8e2d6"/>';
+  const hudI = '<rect width="60" height="60" fill="#15161a"/><g stroke="#ff8a2a" stroke-width="2.4" fill="none"><path d="M14 22V14h8M46 22V14h-8M14 38v8h8M46 38v8h-8"/><circle cx="30" cy="30" r="3"/><path d="M0 30h10M50 30h10M30 0v10M30 50v10" stroke-width="1.2" opacity=".7"/></g>';
+  let lines = '<rect width="60" height="60" fill="#000"/>';
+  for (let i = 0; i < 9; i++) { const y = 10 + i * 5.2; lines += '<path d="M2 ' + y + ' C 16 ' + (y - 6 * Math.sin(i * 0.7 + 1)) + ', 30 ' + (y - 9 * Math.sin(i * 0.5 + 0.4)) + ', 44 ' + (y - 4) + ' S 58 ' + y + ', 60 ' + y + '" stroke="#a8ff8c" stroke-width="1.3" fill="none" stroke-dasharray="1.5 1.8"/>'; }
+  let hatch = '<rect width="60" height="60" fill="#f3f1ea"/><g stroke="#1d2c96" stroke-width="1.1" stroke-linecap="round">';
+  for (let i = -60; i < 60; i += 5) hatch += '<path d="M' + i + ' 60 L' + (i + 60) + ' 0"/>';
+  for (let i = 0; i < 60; i += 5) hatch += '<path d="M' + i + ' 34 L' + (i + 26) + ' 60" opacity=".9"/>';
+  hatch += '</g>';
+  let prism = '<rect width="60" height="60" fill="#0b0b10"/><defs><linearGradient id="IDpr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff2d55"/><stop offset=".2" stop-color="#ff9f0a"/><stop offset=".4" stop-color="#ffd60a"/><stop offset=".6" stop-color="#30d158"/><stop offset=".8" stop-color="#0a84ff"/><stop offset="1" stop-color="#bf5af2"/></linearGradient></defs><rect x="0" y="20" width="60" height="22" fill="url(#IDpr)"/>';
+  for (let x = 1; x < 60; x += 3) prism += '<rect x="' + x + '" y="' + (14 + (x * 7) % 9) + '" width="1" height="' + (26 + (x * 5) % 14) + '" fill="#000" opacity=".35"/>';
+  return { ascii: svg(ascii), dither: svg(dith), dots: svg(dots), vhs: svg(vhs), halftone: svg(half), sort: svg(sort), glitch: svg(glitch), crt: svg(crt), threshold: svg(thr), gmap: svg(gmap), film: svg(film), hud: svg(hudI), lines: svg(lines), hatch: svg(hatch), prism: svg(prism) };
 })();
 let artSeq = 0;
 const artFor = (k, tag) => { const id = 'g' + (tag || '') + (artSeq++) + '_'; return EFFECT_ART[k].replace(/ID/g, id); };
@@ -1802,12 +2050,13 @@ function thumbFor(key, pr) {
   return url;
 }
 function refreshThumbs() { thumbs.clear(); requestAnimationFrame(() => renderLists()); }
-function appTile({ label, art, img, pressed, title, onClick }) {
+function appTile({ label, art, img, pressed, title, onClick, num }) {
   const li = document.createElement('li'); li.className = 'ai';
   const b = document.createElement('button'); b.type = 'button'; b.title = title || label;
   if (pressed !== undefined) b.setAttribute('aria-pressed', pressed);
   const t = document.createElement('span'); t.className = 'tile';
   if (art) t.innerHTML = art; else if (img) t.style.backgroundImage = 'url(' + img + ')';
+  if (num) { const n = document.createElement('i'); n.className = 'num'; n.textContent = num; t.append(n); }
   const l = document.createElement('span'); l.className = 'lbl'; l.textContent = label;
   b.append(t, l); b.onclick = onClick; li.append(b);
   return li;
@@ -1817,7 +2066,7 @@ function renderLists() {
   const fl = $('#fxList'); fl.textContent = '';
   Object.entries(EFFECTS).forEach(([k, e]) => fl.append(appTile({ label: e.name, art: artFor(k), pressed: k === L().fx, title: e.name + ' · applies to the selected layer', onClick: () => setEffect(k) })));
   const pl = $('#presetList'); pl.textContent = '';
-  PRESETS.forEach(pr => pl.append(appTile({ label: pr.name, img: thumbFor('b|' + pr.name, pr), title: stackTitle(pr), onClick: () => applyPreset(pr) })));
+  PRESETS.forEach((pr, i) => pl.append(appTile({ label: pr.name, img: thumbFor('b|' + pr.name, pr), title: stackTitle(pr), onClick: () => applyPreset(pr), num: i < 22 ? String(i + 1).padStart(2, '0') : '' })));
   appendMine(pl);
 }
 function applyPreset(pr) {
@@ -2076,6 +2325,75 @@ function asciiGrid(p) {
   return { cols, rows, cw, ch, ox: -Math.floor((cols * cw - canvas.width) / 2), oy: -Math.floor((rows * ch - canvas.height) / 2) };
 }
 const palArr = new Float32Array(48);
+const hudCanvas = document.createElement('canvas'), hx = hudCanvas.getContext('2d');
+const hudTex = makeTex();
+const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const p2 = n => String(n).padStart(2, '0');
+function drawHudTex(p) {
+  const W = canvas.width, H = canvas.height, S = Math.min(W, H) / 1080;
+  if (hudCanvas.width !== W || hudCanvas.height !== H) { hudCanvas.width = W; hudCanvas.height = H; }
+  hx.clearRect(0, 0, W, H);
+  const now = new Date(), t = performance.now() / 1000;
+  const clock = p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds());
+  const mono = (px, w) => (w || 600) + ' ' + px * S + 'px "Geist Mono", ui-monospace, Menlo, monospace';
+  const txt = (s0, x, y, al, col, px, glow) => {
+    hx.font = mono(px); hx.textAlign = al || 'left'; hx.textBaseline = 'alphabetic';
+    hx.shadowColor = glow || 'rgba(0,0,0,.65)'; hx.shadowBlur = (glow ? 14 : 6) * S; hx.shadowOffsetY = glow ? 0 : 2 * S;
+    hx.fillStyle = col || '#fff'; hx.fillText(s0, x, y);
+    hx.shadowBlur = 0; hx.shadowOffsetY = 0;
+  };
+  const m = 60 * S, st = p.style | 0;
+  if (st === 0) {
+    txt('PLAY ▶', m, m + 44 * S, 'left', '#fff', 54);
+    txt('SP', m, H - m, 'left', '#fff', 40);
+    txt(MON[now.getMonth()] + '. ' + p2(now.getDate()) + ' ' + now.getFullYear(), W - m, H - m - 52 * S, 'right', '#fff', 40);
+    txt(clock.slice(0, 5) + (Math.floor(t * 2) % 2 ? ' ' : ':') + 'AM', W - m, H - m, 'right', '#fff', 40);
+  } else if (st === 1) {
+    txt('CAM 01', m, m + 30 * S, 'left', '#e8e8e8', 34);
+    txt(now.getFullYear() + '-' + p2(now.getMonth() + 1) + '-' + p2(now.getDate()), W - m, m + 30 * S, 'right', '#e8e8e8', 34);
+    txt(clock, W - m, m + 76 * S, 'right', '#e8e8e8', 34);
+    if (Math.floor(t * 1.4) % 2 === 0) { hx.fillStyle = '#ff2b2b'; hx.beginPath(); hx.arc(W - m - 120 * S, m + 112 * S, 10 * S, 0, 7); hx.fill(); txt('REC', W - m, m + 124 * S, 'right', '#ff3b3b', 34); }
+    txt('CH-01  ' + H + 'P  MOTION', m, H - m, 'left', '#e8e8e8', 30);
+  } else if (st === 2) {
+    const d = "'" + String(now.getFullYear()).slice(2) + ' ' + p2(now.getMonth() + 1) + ' ' + p2(now.getDate());
+    txt(d, W - m, H - m, 'right', '#ff9a2e', 58, 'rgba(255,120,30,.9)');
+  } else if (st === 3) {
+    const c = p.color || '#ff8a2a', cx = W / 2, cy = H / 2, bw = Math.min(W, H) * 0.5, bh = bw * 1.1, L = 40 * S;
+    hx.strokeStyle = c; hx.lineWidth = 3 * S; hx.shadowColor = c; hx.shadowBlur = 8 * S;
+    const x0 = cx - bw / 2 + Math.sin(t * 0.9) * 6 * S, y0 = cy - bh / 2 + Math.cos(t * 0.7) * 6 * S;
+    [[x0, y0, 1, 1], [x0 + bw, y0, -1, 1], [x0, y0 + bh, 1, -1], [x0 + bw, y0 + bh, -1, -1]].forEach(([x, y, dx, dy]) => {
+      hx.beginPath(); hx.moveTo(x, y + dy * L); hx.lineTo(x, y); hx.lineTo(x + dx * L, y); hx.stroke();
+    });
+    hx.lineWidth = 1.5 * S; hx.globalAlpha = 0.55;
+    hx.beginPath(); hx.moveTo(0, cy); hx.lineTo(x0 - 20 * S, cy); hx.moveTo(x0 + bw + 20 * S, cy); hx.lineTo(W, cy);
+    hx.moveTo(cx, 0); hx.lineTo(cx, y0 - 20 * S); hx.moveTo(cx, y0 + bh + 20 * S); hx.lineTo(cx, H); hx.stroke();
+    hx.globalAlpha = 1;
+    hx.beginPath(); hx.arc(cx, cy, 12 * S, 0, 7); hx.stroke();
+    for (let i = 0; i < 6; i++) { const yy = y0 + bh * (0.2 + i * 0.12); hx.beginPath(); hx.moveTo(x0 + bw + 8 * S, yy); hx.lineTo(x0 + bw + 22 * S, yy); hx.stroke(); }
+    hx.shadowBlur = 0;
+    txt('TRK 04', x0 + bw + 32 * S, y0 + 30 * S, 'left', c, 26);
+    txt('X ' + (482 + Math.sin(t) * 3).toFixed(2), x0 + bw + 32 * S, y0 + 66 * S, 'left', c, 26);
+    txt('Y ' + (217 + Math.cos(t * 1.3) * 3).toFixed(2), x0 + bw + 32 * S, y0 + 100 * S, 'left', c, 26);
+    txt(Math.floor(t * 2) % 2 ? 'LOCK ●' : 'LOCK', x0 + bw + 32 * S, y0 + 136 * S, 'left', c, 26);
+    txt(now.getFullYear() + '.' + p2(now.getMonth() + 1) + '.' + p2(now.getDate()) + '  ' + clock, m, H - m, 'left', c, 26);
+    txt('SECTOR 7', W - m, m + 26 * S, 'right', c, 26);
+  } else {
+    hx.strokeStyle = 'rgba(255,255,255,.85)'; hx.lineWidth = 4 * S; const L = 56 * S;
+    [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]].forEach(([x, y, dx, dy]) => {
+      hx.beginPath(); hx.moveTo(x, y + dy * L); hx.lineTo(x, y); hx.lineTo(x + dx * L, y); hx.stroke();
+    });
+    if (Math.floor(t * 1.6) % 2 === 0) { hx.fillStyle = '#ff3b3b'; hx.beginPath(); hx.arc(m + 40 * S, m + 52 * S, 11 * S, 0, 7); hx.fill(); }
+    txt('REC', m + 62 * S, m + 64 * S, 'left', '#fff', 34);
+    const sec = Math.floor(t % 3600);
+    txt(p2(Math.floor(sec / 60)) + ':' + p2(sec % 60) + ':' + p2(Math.floor((t % 1) * 30)), W - m - 20 * S, m + 64 * S, 'right', '#fff', 34);
+    hx.strokeStyle = '#fff'; hx.lineWidth = 3 * S; hx.strokeRect(W - m - 120 * S, H - m - 60 * S, 84 * S, 38 * S);
+    hx.fillStyle = '#fff'; hx.fillRect(W - m - 116 * S, H - m - 56 * S, 60 * S, 30 * S); hx.fillRect(W - m - 34 * S, H - m - 48 * S, 8 * S, 14 * S);
+    txt('4K  30P', m + 20 * S, H - m - 24 * S, 'left', '#fff', 30);
+  }
+  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, hudTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hudCanvas);
+  gl.activeTexture(gl.TEXTURE0);
+}
 function setUniforms(pr, ly, first, p, AE) {
   const u = pr.u, k = ly.fx, A = first ? AE : ADJ0;
   gl.uniform2f(u.u_res, canvas.width, canvas.height);
@@ -2103,8 +2421,18 @@ function setUniforms(pr, ly, first, p, AE) {
     gl.uniform2f(u.u_glyph, glyphW, glyphH); gl.uniform1f(u.u_perRow, perRow);
     gl.uniform1f(u.u_nchars, atlasN); gl.uniform1i(u.u_atlas, 1);
   }
+  if (k === 'gmap') {
+    const st = GMAPS[p.map].c || [p.g1, p.g2, p.g3];
+    const arr = new Float32Array(18); st.forEach((h, i) => arr.set(hex3(h), i * 3));
+    gl.uniform3fv(u['u_stops[0]'], arr); gl.uniform1f(u.u_stopN, st.length);
+  }
+  if (k === 'hud') {
+    drawHudTex(p);
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, hudTex); gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(u.u_hud, 4);
+  }
   if (k === 'dither') {
-    const cols = p.pal === 5 ? [p.c1, p.c2, p.c3, p.c4] : PALETTES[p.pal].c;
+    const cols = PALETTES[p.pal].c || [p.c1, p.c2, p.c3, p.c4];
     palArr.fill(0); cols.forEach((h, i) => palArr.set(hex3(h), i * 3));
     gl.uniform3fv(u['u_pal[0]'], palArr); gl.uniform1f(u.u_palN, cols.length);
   }
