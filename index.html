@@ -513,7 +513,7 @@ const EFFECTS = {
   dither: { name: 'Dithering', groups: [
     { controls: [
       { id: 'px', label: 'Pixel Size', min: 1, max: 12, step: 1, def: 2, unit: 'px' },
-      { id: 'matrix', label: 'Matrix', type: 'select', options: ['Bayer 2×2', 'Bayer 4×4', 'Bayer 8×8', 'Noise', 'None'], def: 2 },
+      { id: 'matrix', label: 'Matrix', type: 'select', options: ['Bayer 2×2', 'Bayer 4×4', 'Bayer 8×8', 'Noise', 'None', 'Lines', 'Diagonal'], def: 2 },
       { id: 'levels', label: 'Levels', min: 2, max: 8, step: 1, def: 2, showIf: p => !isPal(p) },
       { id: 'spread', label: 'Spread', min: 0, max: 2, step: 0.05, def: 1 }
     ]},
@@ -799,7 +799,7 @@ float bayer8(vec2 a){ return bayer4(.5*a)*.25 + bayer2(a); }
 void main(){
   vec2 p = floor(gl_FragCoord.xy/u_px);
   vec3 c = src((p+0.5)*u_px/u_res);
-  float t = u_matrix < 0.5 ? bayer2(p) : u_matrix < 1.5 ? bayer4(p) : u_matrix < 2.5 ? bayer8(p) : u_matrix < 3.5 ? hash(p) : 0.5;
+  float t = u_matrix < 0.5 ? bayer2(p) : u_matrix < 1.5 ? bayer4(p) : u_matrix < 2.5 ? bayer8(p) : u_matrix < 3.5 ? hash(p) : u_matrix < 4.5 ? 0.5 : u_matrix < 5.5 ? (mod(p.y, 4.) + 0.5)/4. : (mod(p.x + p.y, 4.) + 0.5)/4.;
   t = (t-0.5)*u_spread + 0.5;
   vec3 col;
   float L = u_levels-1.;
